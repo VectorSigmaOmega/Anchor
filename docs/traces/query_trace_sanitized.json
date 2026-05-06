@@ -1,0 +1,66 @@
+{
+  "trace_name": "anchor.query",
+  "request_id": "f16e23c1-6fa4-4bf8-86e8-5e4a5e7cc922",
+  "input": {
+    "question": "What does the RBI KYC direction require for customer due diligence?"
+  },
+  "spans": [
+    {
+      "name": "request_validation",
+      "output": {
+        "valid": true
+      }
+    },
+    {
+      "name": "lexical_search",
+      "output": {
+        "count": 6
+      }
+    },
+    {
+      "name": "dense_search",
+      "output": {
+        "count": 6
+      }
+    },
+    {
+      "name": "fusion",
+      "output": {
+        "count": 8
+      }
+    },
+    {
+      "name": "rerank",
+      "output": {
+        "count": 5
+      }
+    },
+    {
+      "name": "context_selection",
+      "output": {
+        "context_count": 5
+      }
+    },
+    {
+      "name": "generation",
+      "model": "gemini-2.5-flash",
+      "output": {
+        "status": "answered",
+        "citation_count": 2
+      }
+    },
+    {
+      "name": "response_validation",
+      "output": {
+        "valid": true,
+        "citations": 2
+      }
+    }
+  ],
+  "final_output": {
+    "status": "answered",
+    "refusal_reason": null,
+    "latency_ms": 1420
+  }
+}
+

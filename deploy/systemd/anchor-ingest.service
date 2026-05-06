@@ -1,0 +1,14 @@
+[Unit]
+Description=Anchor ingestion job
+After=network.target postgresql.service
+
+[Service]
+Type=oneshot
+User=anchor
+Group=anchor
+WorkingDirectory=/opt/anchor/current
+EnvironmentFile=/etc/anchor/anchor.env
+ExecStart=/opt/anchor/current/.venv/bin/python -m anchor.ingest.cli
+
+[Install]
+WantedBy=multi-user.target

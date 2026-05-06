@@ -1,0 +1,16 @@
+[Unit]
+Description=Anchor FastAPI service
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=anchor
+Group=anchor
+WorkingDirectory=/opt/anchor/current
+EnvironmentFile=/etc/anchor/anchor.env
+ExecStart=/opt/anchor/current/.venv/bin/python -m uvicorn anchor.api.app:create_app --factory --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

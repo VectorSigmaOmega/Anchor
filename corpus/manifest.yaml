@@ -1,0 +1,186 @@
+snapshot_date: 2026-05-02
+documents:
+  - doc_id: sebi_mutual_funds_2026
+    title: Master Circular for Mutual Funds
+    regulator: SEBI
+    doc_type: master_circular
+    source_url: https://www.sebi.gov.in/legal/master-circulars/mar-2026/master-circular-for-mutual-funds_100491.html
+    published_at: 2026-03-20
+    snapshot_date: 2026-05-02
+    sha256: da255cd9def6e849b561d953f37b2d48447ab955dcd365d9361c3c57fa55a300
+    format: html
+    active: true
+    topic_family: mutual_funds
+  - doc_id: sebi_icdr_2026
+    title: Master Circular for Issue of Capital and Disclosure Requirements
+    regulator: SEBI
+    doc_type: master_circular
+    source_url: https://www.sebi.gov.in/legal/master-circulars/feb-2026/master-circular-for-issue-of-capital-and-disclosure-requirements_99611.html
+    published_at: 2026-02-09
+    snapshot_date: 2026-05-02
+    sha256: 9a0d9eb1352c75c030300f817b3db69f06e734547b5cfa2562cdad46f80ba27a
+    format: html
+    active: true
+    topic_family: icdr
+  - doc_id: sebi_research_analysts_2026
+    title: Master Circular for Research Analysts
+    regulator: SEBI
+    doc_type: master_circular
+    source_url: https://www.sebi.gov.in/legal/master-circulars/feb-2026/master-circular-for-research-analysts_99571.html
+    published_at: 2026-02-06
+    snapshot_date: 2026-05-02
+    sha256: 7f95a29fd7cb292c2d30875277c00edc728b1ea21b0625422abec5c518a33543
+    format: html
+    active: true
+    topic_family: research_analysts
+  - doc_id: sebi_investment_advisers_2026
+    title: Master Circular for Investment Advisers
+    regulator: SEBI
+    doc_type: master_circular
+    source_url: https://www.sebi.gov.in/legal/master-circulars/feb-2026/master-circular-for-investment-advisers_99569.html
+    published_at: 2026-02-06
+    snapshot_date: 2026-05-02
+    sha256: a2ab7a55e57d267b21cd10da93ac4ebd471d6991381ceaad7ef05723a5e644a1
+    format: html
+    active: true
+    topic_family: investment_advisers
+  - doc_id: sebi_rta_2026
+    title: Master Circular for Registrars to an Issue and Share Transfer Agents
+    regulator: SEBI
+    doc_type: master_circular
+    source_url: https://www.sebi.gov.in/legal/master-circulars/feb-2026/master-circular-for-registrars-to-an-issue-and-share-transfer-agents_99567.html
+    published_at: 2026-02-06
+    snapshot_date: 2026-05-02
+    sha256: 6dfe450c5ef0f27452793f0083cbecde36f458eaab6d95a2894a17c9ebe635f7
+    format: html
+    active: true
+    topic_family: registrar_and_transfer_agents
+  - doc_id: sebi_lodr_listed_entities_2026
+    title: Master Circular for compliance with the provisions of the Securities and Exchange Board of India (Listing Obligations and Disclosure Requirements) Regulations, 2015 by listed entities
+    regulator: SEBI
+    doc_type: master_circular
+    source_url: https://www.sebi.gov.in/legal/master-circulars/jan-2026/master-circular-for-compliance-with-the-provisions-of-the-securities-and-exchange-board-of-india-listing-obligations-and-disclosure-requirements-regulations-2015-by-listed-entities_99432.html
+    published_at: 2026-01-30
+    snapshot_date: 2026-05-02
+    sha256: 483a1eac719195efcf703180412cccaffa31c7c151a8acfa630c40a8bd9105b3
+    format: html
+    active: true
+    topic_family: lodr
+  - doc_id: sebi_social_stock_exchange_2026
+    title: Master Circular for Framework on Social Stock Exchange.
+    regulator: SEBI
+    doc_type: master_circular
+    source_url: https://www.sebi.gov.in/legal/master-circulars/jan-2026/master-circular-for-framework-on-social-stock-exchange-_99166.html
+    published_at: 2026-01-19
+    snapshot_date: 2026-05-02
+    sha256: 73785d4a2103a5198e3989a8024822127d54c758282af3595ca8e3cb4e71fc1e
+    format: html
+    active: true
+    topic_family: social_stock_exchange
+  - doc_id: sebi_ncs_listing_2025
+    title: Master Circular for issue and listing of Non-convertible Securities, Securitised Debt Instruments, Security Receipts, Municipal Debt Securities and Commercial Paper
+    regulator: SEBI
+    doc_type: master_circular
+    source_url: https://www.sebi.gov.in/legal/master-circulars/oct-2025/master-circular-for-issue-and-listing-of-non-convertible-securities-securitised-debt-instruments-security-receipts-municipal-debt-securities-and-commercial-paper_97343.html
+    published_at: 2025-10-15
+    snapshot_date: 2026-05-02
+    sha256: 322990c9e8e21e077e204a2d28dd9192eb68925fc7454c7cfd95da5947923007
+    format: html
+    active: true
+    topic_family: non_convertible_securities
+  - doc_id: rbi_psl_sfb_2019
+    title: Master Direction – Priority Sector Lending – Small Finance Banks – Targets and Classification
+    regulator: RBI
+    doc_type: master_direction
+    source_url: https://www.rbi.org.in/commonman/English/scripts/Notification.aspx?Id=3050
+    published_at: 2019-08-01
+    snapshot_date: 2026-05-02
+    sha256: 1202e7487a8d9b89dcff80328827d48933777d6140776692247f4324bfdbdfc4
+    format: html
+    active: true
+    version_label: Updated as on March 12, 2020
+    topic_family: priority_sector_lending
+  - doc_id: rbi_currency_chest_penal_interest_2019
+    title: Master Direction on Levy of Penal Interest for Delayed Reporting / Wrong Reporting / Non-Reporting of Currency Chest Transactions and Inclusion of Ineligible Amounts in Currency Chest Balances
+    regulator: RBI
+    doc_type: master_direction
+    source_url: https://www.rbi.org.in/commonman/English/scripts/Notification.aspx?Id=3013
+    published_at: 2019-07-01
+    snapshot_date: 2026-05-02
+    sha256: 6cee9d31b2709594405e96f0a678775c08cbe8d72bf5d35dbbea488dbf8800ec
+    format: html
+    active: true
+    version_label: Updated as on October 03, 2019
+    topic_family: currency_chests
+  - doc_id: rbi_cdes_2019
+    title: Master Direction on Currency Distribution & Exchange Scheme (CDES) based on performance in rendering customer service to the members of public
+    regulator: RBI
+    doc_type: master_direction
+    source_url: https://www.rbi.org.in/commonman/English/scripts/Notification.aspx?Id=3014
+    published_at: 2019-07-01
+    snapshot_date: 2026-05-02
+    sha256: 041bbfa6d1a9131015383f82f77f72e53faa2c4dd7124d627f0576ad96c209a3
+    format: html
+    active: true
+    version_label: Updated as on January 06, 2020
+    topic_family: currency_management
+  - doc_id: rbi_rrb_psl_2016
+    title: Master Direction - Regional Rural Banks - Priority Sector Lending - Targets and Classification
+    regulator: RBI
+    doc_type: master_direction
+    source_url: https://www.rbi.org.in/commonman/English/scripts/Notification.aspx?Id=2321
+    published_at: 2019-06-27
+    snapshot_date: 2026-05-02
+    sha256: 4fc12eea62e4608330ecf090adb5187270c6956714afe18af00c4356dc7e3c31
+    format: html
+    active: true
+    version_label: Updated as on June 18, 2019
+    topic_family: priority_sector_lending
+  - doc_id: rbi_kyc_2016
+    title: Master Direction - Know Your Customer (KYC) Direction, 2016
+    regulator: RBI
+    doc_type: master_direction
+    source_url: https://www.rbi.org.in/commonman/English/scripts/Notification.aspx?Id=2607
+    published_at: 2019-05-29
+    snapshot_date: 2026-05-02
+    sha256: 5648b8a987c42e19e5ab6a655cdc5901b87d30eef5c52d62f3d2d0e4020d2cd5
+    format: html
+    active: true
+    version_label: Updated as on August 14, 2025
+    topic_family: kyc
+  - doc_id: rbi_msme_2017
+    title: Master Direction - Lending to Micro, Small & Medium Enterprises (MSME) Sector
+    regulator: RBI
+    doc_type: master_direction
+    source_url: https://www.rbi.org.in/commonman/English/scripts/Notification.aspx?Id=2327
+    published_at: 2017-07-24
+    snapshot_date: 2026-05-02
+    sha256: 81cff2a8c560f05c1a526fb99031117a3ffbdda1d714dab2eb2b36fb36fb900a
+    format: html
+    active: true
+    version_label: Updated as on February 09, 2026
+    topic_family: msme
+  - doc_id: rbi_nbfc_public_deposits_2016
+    title: Master Direction - Non-Banking Financial Companies Acceptance of Public Deposits (Reserve Bank) Directions, 2016
+    regulator: RBI
+    doc_type: master_direction
+    source_url: https://www.rbi.org.in/commonman/English/scripts/Notification.aspx?Id=1852
+    published_at: 2016-08-25
+    snapshot_date: 2026-05-02
+    sha256: 7959d642dfc45c429e0dbd7c92d0e307f7b6da3b09b5864fcc41cda646c7bcee
+    format: html
+    active: true
+    version_label: Updated as on February 27, 2025
+    topic_family: nbfc_deposits
+  - doc_id: rbi_psl_2016
+    title: Master Direction - Priority Sector Lending – Targets and Classification
+    regulator: RBI
+    doc_type: master_direction
+    source_url: https://www.rbi.org.in/commonman/English/scripts/Notification.aspx?Id=2342
+    published_at: 2016-07-07
+    snapshot_date: 2026-05-02
+    sha256: 8bd025e71a78ab1e82553a70ab5f1fbecf2c457b553b21e8515938a7a78cabd4
+    format: html
+    active: true
+    version_label: Updated as on December 05, 2019
+    topic_family: priority_sector_lending

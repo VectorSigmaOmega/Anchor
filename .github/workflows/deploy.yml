@@ -1,0 +1,56 @@
+name: deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -f deploy/docker/Dockerfile -t anchor-api:${{ github.sha }} .
+
+      - name: Upload release bundle
+        run: |
+          tar -czf anchor-release.tgz anchor ui deploy corpus eval docs pyproject.toml Makefile README.md docker-compose.yml .env.example
+
+      - name: Copy release bundle to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "anchor-release.tgz"
+          target: "/tmp"
+
+      - name: Restart application
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            sudo mkdir -p /opt/anchor/releases/${{ github.sha }}
+            sudo tar -xzf /tmp/anchor-release.tgz -C /opt/anchor/releases/${{ github.sha }}
+            sudo ln -sfn /opt/anchor/releases/${{ github.sha }} /opt/anchor/current
+            cd /opt/anchor/current
+            python3 -m venv .venv
+            .venv/bin/pip install --upgrade pip
+            .venv/bin/pip install .
+            cd ui
+            npm install
+            npm run build
+            sudo mkdir -p /var/www/anchor/ui
+            sudo rsync -a --delete out/ /var/www/anchor/ui/
+            cd /opt/anchor/current
+            sudo -u postgres psql -d anchor -c 'SELECT 1;'
+            .venv/bin/python -m anchor.db.migrate
+            sudo systemctl restart anchor-api
+            sudo nginx -s reload
+

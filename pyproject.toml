@@ -1,0 +1,68 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "anchor"
+version = "0.1.0"
+description = "Citation-grounded regulatory RAG over SEBI Master Circulars and RBI Master Directions."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "beautifulsoup4>=4.12.3",
+  "fastapi>=0.115.0",
+  "httpx>=0.28.1",
+  "langchain-core>=0.3.55",
+  "langchain-google-vertexai>=2.0.20",
+  "langfuse>=2.60.3",
+  "orjson>=3.10.18",
+  "prometheus-client>=0.21.1",
+  "psycopg[binary,pool]>=3.2.6",
+  "pydantic>=2.11.4",
+  "pydantic-settings>=2.9.1",
+  "pymupdf>=1.25.5",
+  "pyyaml>=6.0.2",
+  "tenacity>=9.1.2",
+  "uvicorn>=0.34.2",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.5",
+  "pytest-asyncio>=0.26.0",
+  "respx>=0.22.0",
+  "ruff>=0.11.8",
+]
+
+[project.scripts]
+anchor-api = "anchor.api.app:main"
+anchor-ingest = "anchor.ingest.cli:main"
+anchor-eval = "anchor.eval.cli:main"
+anchor-migrate = "anchor.db.migrate:main"
+
+[tool.setuptools]
+packages = [
+  "anchor",
+  "anchor.api",
+  "anchor.db",
+  "anchor.eval",
+  "anchor.ingest",
+  "anchor.pipeline",
+  "anchor.providers",
+  "anchor.services",
+]
+
+[tool.ruff]
+line-length = 140
+target-version = "py311"
+exclude = ["build", "ui/out"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/build_eval_dataset.py" = ["E501"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
