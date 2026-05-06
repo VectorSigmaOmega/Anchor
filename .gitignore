@@ -7,6 +7,7 @@ __pycache__/
 .benchmarks/
 anchor.egg-info/
 node_modules/
+ui/.next/
 ui/out/
 dist/
 build/
