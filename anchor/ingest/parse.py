@@ -11,7 +11,9 @@ from anchor.schemas import DocumentRecord, ParsedBlock, ParsedDocument
 HEADING_RE = re.compile(r"^((\d+(\.\d+)*)|([IVXLC]+))[.)]?\s+\S+")
 
 
-def normalize_text(text: str) -> str:
+def normalize_text(text: str | None) -> str:
+    if text is None:
+        return ""
     return " ".join(text.replace("\u00a0", " ").split())
 
 
@@ -25,7 +27,7 @@ def looks_like_heading(text: str) -> bool:
     return bool(text.istitle() and len(text.split()) <= 12)
 
 
-def serialize_table(rows: list[list[str]]) -> str:
+def serialize_table(rows: list[list[str | None]]) -> str:
     rendered_rows = []
     for row in rows:
         cleaned = [normalize_text(cell) for cell in row if normalize_text(cell)]
