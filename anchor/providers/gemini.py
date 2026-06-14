@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Sequence
 from typing import Any, Protocol
@@ -88,21 +89,38 @@ class GeminiAPIClient:
                 "GEMINI_API_KEY is required for Gemini API calls",
                 provider="gemini",
             )
-        try:
-            async with httpx.AsyncClient(timeout=self.settings.request_timeout_seconds) as client:
-                response = await client.post(
-                    f"{self.base_url}/{path.lstrip('/')}",
-                    headers={
-                        "Content-Type": "application/json",
-                        "x-goog-api-key": self.api_key,
-                    },
-                    json=payload,
-                )
-        except httpx.HTTPError as exc:
+        response: httpx.Response | None = None
+        async with httpx.AsyncClient(timeout=self.settings.request_timeout_seconds) as client:
+            for attempt in range(1, 6):
+                try:
+                    response = await client.post(
+                        f"{self.base_url}/{path.lstrip('/')}",
+                        headers={
+                            "Content-Type": "application/json",
+                            "x-goog-api-key": self.api_key,
+                        },
+                        json=payload,
+                    )
+                except httpx.HTTPError as exc:
+                    if attempt == 5:
+                        raise ProviderError(
+                            f"Gemini API request failed: {exc}",
+                            provider="gemini",
+                        ) from exc
+                    await asyncio.sleep(2 * attempt)
+                    continue
+                if response.status_code not in {429, 500, 502, 503, 504}:
+                    break
+                if attempt == 5:
+                    break
+                retry_after = response.headers.get("retry-after")
+                delay = float(retry_after) if retry_after and retry_after.isdecimal() else min(60.0, 5.0 * attempt)
+                await asyncio.sleep(delay)
+        if response is None:
             raise ProviderError(
-                f"Gemini API request failed: {exc}",
+                "Gemini API request failed before receiving a response",
                 provider="gemini",
-            ) from exc
+            )
         if response.status_code >= 400:
             raise ProviderError(
                 f"Gemini API request failed with status {response.status_code}",

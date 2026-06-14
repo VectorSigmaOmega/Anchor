@@ -5,6 +5,7 @@ import httpx
 import pytest
 
 from anchor.config import Settings
+from anchor.providers import gemini
 from anchor.providers.gemini import GeminiAPIClient, GeminiEmbeddingProvider, GeminiGenerationProvider, ProviderError
 from anchor.schemas import RetrievedChunk
 
@@ -57,6 +58,25 @@ class InvalidJsonAsyncClient:
         return httpx.Response(200, content=b"not-json")
 
 
+class RateLimitThenSuccessAsyncClient:
+    calls = 0
+
+    def __init__(self, *args, **kwargs) -> None:
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, traceback) -> None:
+        pass
+
+    async def post(self, *args, **kwargs):
+        self.__class__.calls += 1
+        if self.__class__.calls == 1:
+            return httpx.Response(429, json={"error": "rate limited"})
+        return httpx.Response(200, json={"ok": True})
+
+
 def test_embedding_provider_uses_retrieval_config() -> None:
     provider = GeminiEmbeddingProvider(settings())
     provider.client = FakeGeminiClient({"embedding": {"values": [0.0] * 768}})  # type: ignore[assignment]
@@ -70,11 +90,28 @@ def test_embedding_provider_uses_retrieval_config() -> None:
 
 
 def test_api_client_wraps_transport_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def no_sleep(seconds: float) -> None:
+        return None
+
+    monkeypatch.setattr(gemini.asyncio, "sleep", no_sleep)
     monkeypatch.setattr(httpx, "AsyncClient", RaisingAsyncClient)
     client = GeminiAPIClient(settings())
 
     with pytest.raises(ProviderError):
         asyncio.run(client.post("gemini-2.5-flash:generateContent", {}))
+
+
+def test_api_client_retries_rate_limits(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def no_sleep(seconds: float) -> None:
+        return None
+
+    RateLimitThenSuccessAsyncClient.calls = 0
+    monkeypatch.setattr(gemini.asyncio, "sleep", no_sleep)
+    monkeypatch.setattr(httpx, "AsyncClient", RateLimitThenSuccessAsyncClient)
+    client = GeminiAPIClient(settings())
+
+    assert asyncio.run(client.post("gemini-2.5-flash:generateContent", {})) == {"ok": True}
+    assert RateLimitThenSuccessAsyncClient.calls == 2
 
 
 def test_api_client_wraps_invalid_json(monkeypatch: pytest.MonkeyPatch) -> None:
