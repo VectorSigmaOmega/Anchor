@@ -16,8 +16,12 @@ class NullSpan:
     _client: Any = None
 
     def end(self, output: Any | None = None) -> None:
-        if self._client and hasattr(self._client, "end"):
+        if not self._client or not hasattr(self._client, "end"):
+            return
+        try:
             self._client.end(output=output)
+        except Exception:
+            return
 
 
 class NullTrace:
@@ -26,17 +30,27 @@ class NullTrace:
 
     def span(self, name: str, input: Any | None = None) -> NullSpan:
         if self.client and hasattr(self.client, "span"):
-            return NullSpan(self.client.span(name=name, input=input))
+            try:
+                return NullSpan(self.client.span(name=name, input=input))
+            except Exception:
+                return NullSpan()
         return NullSpan()
 
     def generation(self, name: str, model: str, input: Any | None = None) -> NullSpan:
         if self.client and hasattr(self.client, "generation"):
-            return NullSpan(self.client.generation(name=name, model=model, input=input))
+            try:
+                return NullSpan(self.client.generation(name=name, model=model, input=input))
+            except Exception:
+                return NullSpan()
         return NullSpan()
 
     def end(self, output: Any | None = None) -> None:
-        if self.client and hasattr(self.client, "update"):
+        if not self.client or not hasattr(self.client, "update"):
+            return
+        try:
             self.client.update(output=output)
+        except Exception:
+            return
 
 
 class Tracer:
@@ -52,9 +66,14 @@ class Tracer:
     def start_query_trace(self, *, request_id: str, question: str) -> NullTrace:
         if not self._client:
             return NullTrace()
-        trace = self._client.trace(
-            name="anchor.query",
-            input={"question": question},
-            metadata={"request_id": request_id},
-        )
+        if not hasattr(self._client, "trace"):
+            return NullTrace()
+        try:
+            trace = self._client.trace(
+                name="anchor.query",
+                input={"question": question},
+                metadata={"request_id": request_id},
+            )
+        except Exception:
+            return NullTrace()
         return NullTrace(trace)
