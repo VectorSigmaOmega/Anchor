@@ -14,6 +14,10 @@ on:
   push:
     branches: ["main"]
 
+concurrency:
+  group: anchor-production-deploy
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -21,6 +25,7 @@ jobs:
     env:
       ANCHOR_DOMAIN: ${{ secrets.ANCHOR_DOMAIN }}
       LETSENCRYPT_EMAIL: ${{ secrets.LETSENCRYPT_EMAIL }}
+      RELEASE_ID: ${{ github.sha }}-${{ github.run_id }}
       RUN_INGEST: ${{ github.event.inputs.run_ingest || 'false' }}
 
     steps:
@@ -45,7 +50,7 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          envs: ANCHOR_DOMAIN,LETSENCRYPT_EMAIL,RUN_INGEST
+          envs: ANCHOR_DOMAIN,LETSENCRYPT_EMAIL,RELEASE_ID,RUN_INGEST
           command_timeout: 120m
           script: |
             set -euo pipefail
@@ -64,10 +69,10 @@ jobs:
               python3-venv \
               rsync
             test -f /etc/anchor/anchor.env
-            sudo mkdir -p /opt/anchor/releases/${{ github.sha }}
-            sudo tar -xzf /tmp/anchor-release.tgz -C /opt/anchor/releases/${{ github.sha }}
-            sudo chown -R "$USER":"$USER" /opt/anchor/releases/${{ github.sha }}
-            sudo ln -sfn /opt/anchor/releases/${{ github.sha }} /opt/anchor/current
+            sudo mkdir -p "/opt/anchor/releases/$RELEASE_ID"
+            sudo tar -xzf /tmp/anchor-release.tgz -C "/opt/anchor/releases/$RELEASE_ID"
+            sudo chown -R "$USER":"$USER" "/opt/anchor/releases/$RELEASE_ID"
+            sudo ln -sfn "/opt/anchor/releases/$RELEASE_ID" /opt/anchor/current
             cd /opt/anchor/current
             python3 -m venv .venv
             .venv/bin/pip install --upgrade pip
@@ -85,7 +90,7 @@ jobs:
             if [ "$RUN_INGEST" = "true" ]; then
               .venv/bin/python -m anchor.ingest.cli
             fi
-            sudo chown -R anchor:anchor /opt/anchor/releases/${{ github.sha }}
+            sudo chown -R anchor:anchor "/opt/anchor/releases/$RELEASE_ID"
             sudo install -m 0644 deploy/systemd/anchor-api.service /etc/systemd/system/anchor-api.service
             sudo install -m 0644 deploy/systemd/anchor-ingest.service /etc/systemd/system/anchor-ingest.service
             sudo systemctl daemon-reload
