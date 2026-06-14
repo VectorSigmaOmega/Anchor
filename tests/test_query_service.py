@@ -88,9 +88,7 @@ def test_query_service_answer_path() -> None:
     settings = Settings.model_validate(
         {
             "database_url": "postgresql://anchor:anchor@localhost:5432/anchor",
-            "vertex_project_id": "project",
-            "vertex_location": "us-central1",
-            "google_application_credentials": "/tmp/fake.json",
+            "gemini_api_key": "key",
             "cohere_api_key": "key",
         }
     )
@@ -110,4 +108,3 @@ def test_query_service_answer_path() -> None:
 
     assert result.response.status == "answered"
     assert result.response.citations[0].doc_id == "rbi_kyc_2016"
-

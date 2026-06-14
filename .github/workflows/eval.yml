@@ -25,9 +25,7 @@ jobs:
 
     env:
       DATABASE_URL: postgresql://anchor:anchor@localhost:5432/anchor
-      VERTEX_PROJECT_ID: ${{ secrets.VERTEX_PROJECT_ID }}
-      VERTEX_LOCATION: ${{ secrets.VERTEX_LOCATION }}
-      GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp-key.json
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GENERATION_MODEL: gemini-2.5-flash
       EMBEDDING_MODEL: gemini-embedding-2
       EMBEDDING_DIMENSION: 768
@@ -47,9 +45,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install .[dev]
 
-      - name: Write GCP credentials
-        run: echo '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}' > /tmp/gcp-key.json
-
       - name: Migrate
         run: python -m anchor.db.migrate
 
@@ -64,4 +59,3 @@ jobs:
         with:
           name: anchor-eval
           path: docs/EVAL.md
-

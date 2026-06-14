@@ -15,20 +15,20 @@ class Settings(BaseSettings):
     environment: str = "development"
     log_level: str = "INFO"
     database_url: str
-    vertex_project_id: str
-    vertex_location: str
-    google_application_credentials: str
+    gemini_api_key: str = ""
+    gemini_api_base_url: str = "https://generativelanguage.googleapis.com/v1beta/models"
     generation_model: str = "gemini-2.5-flash"
     embedding_model: str = "gemini-embedding-2"
     embedding_dimension: int = 768
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""
     langfuse_host: str = "https://cloud.langfuse.com"
-    cohere_api_key: str
+    cohere_api_key: str = ""
     rerank_model: str = "rerank-v4.0-pro"
     rate_limit_rpm: int = 10
     rate_limit_rpd: int = 100
     max_query_chars: int = 800
+    max_completion_tokens: int = 512
     rrf_constant: int = 60
     lexical_candidate_count: int = 30
     dense_candidate_count: int = 30
@@ -44,8 +44,22 @@ class Settings(BaseSettings):
     corpus_manifest_path: Path = Path("corpus/manifest.yaml")
     raw_corpus_dir: Path = Path("corpus/raw")
 
+    def validate_ingest_runtime(self) -> None:
+        self._require("GEMINI_API_KEY", self.gemini_api_key)
+
+    def validate_query_runtime(self) -> None:
+        self._require("GEMINI_API_KEY", self.gemini_api_key)
+        self._require("COHERE_API_KEY", self.cohere_api_key)
+        if self.environment == "production":
+            self._require("LANGFUSE_PUBLIC_KEY", self.langfuse_public_key)
+            self._require("LANGFUSE_SECRET_KEY", self.langfuse_secret_key)
+
+    @staticmethod
+    def _require(name: str, value: str) -> None:
+        if not value:
+            raise ValueError(f"{name} is required for this runtime path")
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()
-

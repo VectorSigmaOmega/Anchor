@@ -20,8 +20,8 @@ Rules:
 
 Implementation note:
 
-- `langchain-core` and `langchain-google-vertexai` may be used for prompt templates, model adapters, and structured response parsing
-- retrieval SQL, RRF fusion, rerank orchestration, refusal rules, and citation validation should remain first-party application code
+- Gemini API calls use first-party application adapters backed by developer environment secrets.
+- Retrieval SQL, RRF fusion, rerank orchestration, refusal rules, and citation validation remain first-party application code.
 
 ## 2. Public API Contract
 
@@ -368,22 +368,32 @@ The smoke set must be versioned alongside the golden set and should change rarel
 
 ## 10. Environment Variables
 
-Required environment variables:
+Required for all database-backed commands:
 
 - `DATABASE_URL`
-- `VERTEX_PROJECT_ID`
-- `VERTEX_LOCATION`
-- `GOOGLE_APPLICATION_CREDENTIALS`
+
+Required for ingestion:
+
+- `GEMINI_API_KEY`
+- `EMBEDDING_MODEL`
+- `EMBEDDING_DIMENSION`
+
+Required for query API and live eval:
+
+- `GEMINI_API_KEY`
 - `GENERATION_MODEL`
 - `EMBEDDING_MODEL`
 - `EMBEDDING_DIMENSION`
-- `LANGFUSE_PUBLIC_KEY`
-- `LANGFUSE_SECRET_KEY`
 - `COHERE_API_KEY`
 - `RERANK_MODEL`
 - `RATE_LIMIT_RPM`
 - `RATE_LIMIT_RPD`
 - `MAX_QUERY_CHARS`
+
+Required for production query API:
+
+- `LANGFUSE_PUBLIC_KEY`
+- `LANGFUSE_SECRET_KEY`
 
 Recommended defaults:
 
@@ -391,9 +401,11 @@ Recommended defaults:
 - `RATE_LIMIT_RPD=100`
 - `MAX_QUERY_CHARS=800`
 - `EMBEDDING_DIMENSION=768`
+- `MAX_COMPLETION_TOKENS=512`
 
 Recommended optional environment variables:
 
+- `GEMINI_API_BASE_URL=https://generativelanguage.googleapis.com/v1beta/models`
 - `RERANK_MIN_TOP_SCORE=0.35`
 - `RERANK_MIN_SUPPORT_SCORE=0.20`
 - `RERANK_MIN_SUPPORT_COUNT=2`

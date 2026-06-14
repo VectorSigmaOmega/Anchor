@@ -7,9 +7,7 @@ def settings() -> Settings:
     return Settings.model_validate(
         {
             "database_url": "postgresql://anchor:anchor@localhost:5432/anchor",
-            "vertex_project_id": "project",
-            "vertex_location": "us-central1",
-            "google_application_credentials": "/tmp/fake.json",
+            "gemini_api_key": "key",
             "cohere_api_key": "key",
         }
     )
@@ -51,4 +49,3 @@ def test_refusal_threshold_insufficient_support() -> None:
         settings(),
     )
     assert reason == "insufficient_support"
-

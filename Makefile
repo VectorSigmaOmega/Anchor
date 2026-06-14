@@ -27,13 +27,13 @@ lint:
 	$(PYTHON) -m ruff check .
 
 eval-smoke:
-	$(PYTHON) eval/run.py --smoke
+	$(PYTHON) eval/run.py --smoke --fixture-mode
 
 eval:
 	$(PYTHON) eval/run.py
 
 ui-build:
-	cd $(UI_DIR) && npm install && npm run build
+	cd $(UI_DIR) && npm ci && npm run build
 
 build:
 	docker build -f deploy/docker/Dockerfile -t anchor-api .

@@ -6,9 +6,7 @@ def test_manifest_loads_and_meets_scope_contract() -> None:
     settings = Settings.model_validate(
         {
             "database_url": "postgresql://anchor:anchor@localhost:5432/anchor",
-            "vertex_project_id": "project",
-            "vertex_location": "us-central1",
-            "google_application_credentials": "/tmp/fake.json",
+            "gemini_api_key": "key",
             "cohere_api_key": "key",
         }
     )
@@ -18,4 +16,3 @@ def test_manifest_loads_and_meets_scope_contract() -> None:
     assert len(active) == 16
     assert sum(1 for doc in active if doc.regulator == "SEBI") == 8
     assert sum(1 for doc in active if doc.regulator == "RBI") == 8
-

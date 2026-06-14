@@ -13,9 +13,9 @@ Anchor is a narrow, production-shaped RAG system over a fixed corpus of official
 
 - FastAPI
 - PostgreSQL + pgvector
-- Vertex AI for embeddings and generation
+- Gemini Developer API for embeddings and generation
 - Cohere Rerank API
-- LangChain Core + `langchain-google-vertexai` as thin adapters
+- first-party provider adapters
 - Langfuse for tracing
 - Next.js static export UI
 - nginx + systemd deployment artifacts
@@ -42,9 +42,7 @@ make setup
 2. Copy `.env.example` to `.env` and fill in:
 
 - `DATABASE_URL`
-- `VERTEX_PROJECT_ID`
-- `VERTEX_LOCATION`
-- `GOOGLE_APPLICATION_CREDENTIALS`
+- `GEMINI_API_KEY`
 - `COHERE_API_KEY`
 - `LANGFUSE_PUBLIC_KEY`
 - `LANGFUSE_SECRET_KEY`
@@ -149,7 +147,7 @@ make ui-build
 - Smoke subset: [`eval/smoke.jsonl`](eval/smoke.jsonl)
 - Latest summary: [`docs/EVAL.md`](docs/EVAL.md)
 
-Smoke eval is fixture-backed so CI can validate the benchmark path without cloud credentials:
+Smoke eval is fixture-backed so CI can validate the benchmark path without provider credentials:
 
 ```bash
 ./.venv/bin/python eval/run.py --smoke --fixture-mode --write-docs
@@ -166,6 +164,8 @@ Full eval runs the direct query service against the indexed corpus and requires 
 - nginx serves `ui/out` and proxies `/query` and `/healthz`
 - systemd units live under [`deploy/systemd`](deploy/systemd)
 - nginx config lives at [`deploy/nginx/anchor.conf`](deploy/nginx/anchor.conf)
+- Production TLS template lives at [`deploy/nginx/anchor.tls.conf.template`](deploy/nginx/anchor.tls.conf.template)
+- Deployment runbook: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
 - the GitHub Actions deploy workflow expects a VPS with Python, Node, nginx, PostgreSQL + pgvector, and `/etc/anchor/anchor.env`
 
 ## Review Aids
@@ -174,4 +174,3 @@ Full eval runs the direct query service against the indexed corpus and requires 
 - Implementation contract: [`docs/SPEC.md`](docs/SPEC.md)
 - Product requirements: [`docs/PRD.md`](docs/PRD.md)
 - Sanitized trace snapshot: [`docs/traces/query_trace_sanitized.json`](docs/traces/query_trace_sanitized.json)
-

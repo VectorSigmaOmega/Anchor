@@ -27,13 +27,13 @@ jobs:
 
       - name: Install frontend
         working-directory: ui
-        run: npm install
+        run: npm ci
 
       - name: Lint
-        run: make lint
+        run: make lint PYTHON=python
 
       - name: Tests
-        run: make test
+        run: make test PYTHON=python
 
       - name: UI build
         working-directory: ui
@@ -44,4 +44,3 @@ jobs:
 
       - name: Container build
         run: docker build -f deploy/docker/Dockerfile -t anchor-api .
-

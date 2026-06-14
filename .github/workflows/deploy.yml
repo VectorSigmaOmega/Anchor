@@ -2,6 +2,15 @@ name: deploy
 
 on:
   workflow_dispatch:
+    inputs:
+      run_ingest:
+        description: "Run corpus ingestion after deployment"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
   push:
     branches: ["main"]
 
@@ -9,12 +18,13 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    env:
+      ANCHOR_DOMAIN: ${{ secrets.ANCHOR_DOMAIN }}
+      LETSENCRYPT_EMAIL: ${{ secrets.LETSENCRYPT_EMAIL }}
+      RUN_INGEST: ${{ github.event.inputs.run_ingest || 'false' }}
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Build image
-        run: docker build -f deploy/docker/Dockerfile -t anchor-api:${{ github.sha }} .
 
       - name: Upload release bundle
         run: |
@@ -35,22 +45,75 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          envs: ANCHOR_DOMAIN,LETSENCRYPT_EMAIL,RUN_INGEST
           script: |
+            test -n "$ANCHOR_DOMAIN"
+            if ! id anchor >/dev/null 2>&1; then
+              sudo useradd --system --home /opt/anchor --shell /usr/sbin/nologin anchor
+            fi
+            sudo apt-get update
+            sudo apt-get install -y \
+              certbot \
+              nginx \
+              nodejs \
+              npm \
+              postgresql-client \
+              python3-certbot-nginx \
+              python3-venv \
+              rsync
+            test -f /etc/anchor/anchor.env
             sudo mkdir -p /opt/anchor/releases/${{ github.sha }}
             sudo tar -xzf /tmp/anchor-release.tgz -C /opt/anchor/releases/${{ github.sha }}
+            sudo chown -R "$USER":"$USER" /opt/anchor/releases/${{ github.sha }}
             sudo ln -sfn /opt/anchor/releases/${{ github.sha }} /opt/anchor/current
             cd /opt/anchor/current
             python3 -m venv .venv
             .venv/bin/pip install --upgrade pip
             .venv/bin/pip install .
             cd ui
-            npm install
+            npm ci
             npm run build
             sudo mkdir -p /var/www/anchor/ui
             sudo rsync -a --delete out/ /var/www/anchor/ui/
             cd /opt/anchor/current
-            sudo -u postgres psql -d anchor -c 'SELECT 1;'
+            set -a
+            . /etc/anchor/anchor.env
+            set +a
             .venv/bin/python -m anchor.db.migrate
+            if [ "$RUN_INGEST" = "true" ]; then
+              .venv/bin/python -m anchor.ingest.cli
+            fi
+            sudo chown -R anchor:anchor /opt/anchor/releases/${{ github.sha }}
+            sudo install -m 0644 deploy/systemd/anchor-api.service /etc/systemd/system/anchor-api.service
+            sudo install -m 0644 deploy/systemd/anchor-ingest.service /etc/systemd/system/anchor-ingest.service
+            sudo systemctl daemon-reload
+            sudo systemctl enable anchor-api
+            sudo sed "s/__ANCHOR_DOMAIN__/$ANCHOR_DOMAIN/g" deploy/nginx/anchor.tls.conf.template | sudo tee /etc/nginx/sites-available/anchor >/dev/null
+            sudo mkdir -p /etc/nginx/sites-enabled
+            sudo ln -sfn /etc/nginx/sites-available/anchor /etc/nginx/sites-enabled/anchor
+            if [ ! -f "/etc/letsencrypt/live/$ANCHOR_DOMAIN/fullchain.pem" ]; then
+              sudo mkdir -p /var/www/certbot
+              sudo tee /etc/nginx/sites-available/anchor-bootstrap >/dev/null <<EOF
+            server {
+                listen 80;
+                listen [::]:80;
+                server_name $ANCHOR_DOMAIN;
+                location /.well-known/acme-challenge/ {
+                    root /var/www/certbot;
+                }
+                location / {
+                    return 200 'anchor bootstrap';
+                }
+            }
+            EOF
+              sudo ln -sfn /etc/nginx/sites-available/anchor-bootstrap /etc/nginx/sites-enabled/anchor
+              sudo nginx -t
+              sudo nginx -s reload
+              sudo certbot certonly --webroot -w /var/www/certbot -d "$ANCHOR_DOMAIN" --agree-tos -m "$LETSENCRYPT_EMAIL" --non-interactive
+              sudo ln -sfn /etc/nginx/sites-available/anchor /etc/nginx/sites-enabled/anchor
+            fi
+            test -f "/etc/letsencrypt/live/$ANCHOR_DOMAIN/fullchain.pem"
+            test -f "/etc/letsencrypt/live/$ANCHOR_DOMAIN/privkey.pem"
+            sudo nginx -t
             sudo systemctl restart anchor-api
             sudo nginx -s reload
-

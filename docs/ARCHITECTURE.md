@@ -11,11 +11,11 @@ Anchor is a **small monolith**:
 
 Managed services are used only where they clearly reduce solo-maintainer burden:
 
-- Vertex AI for generation and embeddings
+- Gemini Developer API for generation and embeddings
 - Cohere Rerank API for hosted reranking
 - Langfuse Cloud for private tracing
 
-Implementation libraries may include `langchain-core` and `langchain-google-vertexai` where they reduce glue code without hiding system behavior.
+Gemini API calls are implemented as thin first-party HTTP adapters so provider behavior remains easy to inspect.
 
 Everything else stays local and simple. This is intentional. Anchor is a production-grade portfolio project, not an excuse to assemble extra infrastructure.
 
@@ -72,13 +72,13 @@ The online path is a straight-through function pipeline:
 4. fuse with RRF
 5. rerank the fused candidate set
 6. select final context window
-7. call Vertex AI generation model
+7. call Gemini generation model
 8. validate citations and response shape
 9. return answered or refused response
 
 No LangGraph or agent framework is used. The workflow is still linear enough that a simple pipeline is the right choice.
 
-`langchain-core` may be used for prompt templates and structured output handling, but retrieval SQL, RRF fusion, rerank wiring, and refusal decisions stay in application code.
+Provider adapters, retrieval SQL, RRF fusion, rerank wiring, and refusal decisions stay in application code.
 
 ### 3.3 anchor-ingest (CLI)
 
@@ -87,14 +87,13 @@ No LangGraph or agent framework is used. The workflow is still linear enough tha
 - verifies content hashes
 - parses PDFs and HTML
 - chunks into heading-aware spans
-- embeds with Vertex AI `gemini-embedding-2`
+- embeds with Gemini API `gemini-embedding-2`
 - upserts into PostgreSQL
 - records an ingestion run summary
 
 Primary parsing choices:
 
-- PDF: `docling`
-- PDF fallback: `PyMuPDF`
+- PDF: `PyMuPDF`
 - HTML normalization: `BeautifulSoup`
 
 ### 3.4 PostgreSQL plus pgvector
@@ -120,7 +119,7 @@ The database is the single retrieval system for MVP. No separate vector database
 - no client-side API keys
 - no auth flows
 
-### 3.6 Vertex AI
+### 3.6 Gemini Developer API
 
 Used for:
 
@@ -151,7 +150,7 @@ Public reviewers do not get live access by default. Sanitized trace snapshots ar
 
 ### 3.9 Eval Harness
 
-- `eval/golden.jsonl` stores the reviewed benchmark
+- `eval/golden.jsonl` stores the benchmark dataset; generated seed rows must be reviewed before production claims
 - `eval/run.py` runs the full benchmark
 - smoke eval runs in CI on PRs
 - full eval runs manually or on schedule
@@ -188,9 +187,9 @@ Public reviewers do not get live access by default. Sanitized trace snapshots ar
 | Layer | Choice | Rationale |
 |---|---|---|
 | API framework | FastAPI | typed, small, reliable |
-| LLM app library | `langchain-core` + `langchain-google-vertexai` | recognizable ecosystem tooling for model adapters and prompt plumbing without outsourcing core logic |
-| Generation model | Vertex AI `gemini-2.5-flash` | stable managed model, good price/performance |
-| Embeddings | Vertex AI `gemini-embedding-2` | current GA Google embedding model |
+| LLM app library | first-party Gemini API adapter | keeps provider calls inspectable and avoids cloud service-account setup |
+| Generation model | Gemini API `gemini-2.5-flash` | stable managed model, good price/performance |
+| Embeddings | Gemini API `gemini-embedding-2` | current Google embedding model |
 | Reranking | Cohere Rerank API | hosted reranking without operating a separate service |
 | Retrieval store | PostgreSQL + pgvector | one DB for lexical and dense retrieval |
 | Retrieval strategy | BM25 + dense + RRF + rerank | production-style hybrid retrieval with stronger final ranking |
@@ -213,14 +212,14 @@ Secrets live in `/etc/anchor/anchor.env`.
 CI/CD:
 
 - on every PR: lint, unit tests, smoke eval, container build
-- on merge to `main`: build image, push to registry, restart service on VPS
+- on merge to `main`: upload release bundle, rebuild the venv/static UI on the VPS, migrate, optionally ingest, and restart services
 - full benchmark runs via workflow dispatch or schedule
 
 ## 7. Failure Modes and Responses
 
 | Failure | Detection | Response |
 |---|---|---|
-| Vertex AI generation timeout | per-call timeout | return 504; tag trace; retry once on transient `5xx` only |
+| Gemini generation timeout | per-call timeout | return 504; tag trace; retry malformed output only |
 | Embedding call fails during ingestion | CLI error | document is not committed; re-run remains idempotent |
 | Dense search fails | query exception | fallback to lexical-only retrieval; tag trace |
 | Rerank API fails | API error or timeout | fallback to fused pre-rerank ordering; tag trace |

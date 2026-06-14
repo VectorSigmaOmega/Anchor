@@ -11,8 +11,8 @@ from anchor.logging import log_extra
 from anchor.pipeline.citations import validate_and_hydrate_citations
 from anchor.pipeline.refusal import refusal_reason_for_context
 from anchor.pipeline.rrf import fuse_ranked_chunks
+from anchor.providers.gemini import EmbeddingProvider, GenerationProvider, MalformedModelOutputError
 from anchor.providers.rerank import RerankProvider
-from anchor.providers.vertex import EmbeddingProvider, GenerationProvider
 from anchor.schemas import ModelQueryResponse, QueryExecutionResult, QueryResponse, RetrievedChunk
 from anchor.services.metrics import Metrics
 from anchor.services.tracing import NullTrace, Tracer
@@ -60,7 +60,20 @@ class QueryService:
             reranked = await self._rerank(question, fused_pool, trace)
             context_span = trace.span("context_selection", input={"reranked_count": len(reranked)})
             context_chunks = reranked[: self.settings.final_context_top_k]
-            context_span.end(output={"context_count": len(context_chunks)})
+            context_span.end(
+                output={
+                    "context_count": len(context_chunks),
+                    "chunks": [
+                        {
+                            "chunk_id": chunk.chunk_id,
+                            "doc_id": chunk.doc_id,
+                            "section_path": chunk.section_path,
+                            "relevance_score": chunk.relevance_score,
+                        }
+                        for chunk in context_chunks
+                    ],
+                }
+            )
             refusal_reason = refusal_reason_for_context(question, reranked, context_chunks, self.settings)
             if refusal_reason:
                 response = self._refusal_response(request_id, refusal_reason, started)
@@ -74,19 +87,23 @@ class QueryService:
                     model_response, context_chunks, max_rendered=4
                 )
                 if not hydrated[0]:
-                    retry_response = await self._generate(
-                        question,
-                        context_chunks,
-                        trace,
-                        retry_note=(
-                            "Your previous output was invalid. Use only allowed chunk IDs from the context and "
-                            "return plain text without markdown tables or HTML."
-                        ),
-                    )
-                    hydrated = validate_and_hydrate_citations(
-                        retry_response, context_chunks, max_rendered=4
-                    )
-                    model_response = retry_response
+                    try:
+                        retry_response = await self._generate(
+                            question,
+                            context_chunks,
+                            trace,
+                            retry_note=(
+                                "Your previous output was invalid. Use only allowed chunk IDs from the context and "
+                                "return plain text without markdown tables or HTML."
+                            ),
+                        )
+                    except MalformedModelOutputError:
+                        hydrated = (False, [])
+                    else:
+                        hydrated = validate_and_hydrate_citations(
+                            retry_response, context_chunks, max_rendered=4
+                        )
+                        model_response = retry_response
                 validation_span.end(
                     output={
                         "valid": hydrated[0],
@@ -158,7 +175,19 @@ class QueryService:
             dense_chunks,
             constant=self.settings.rrf_constant,
         )
-        span.end(output={"count": len(fused)})
+        span.end(
+            output={
+                "count": len(fused),
+                "top_chunks": [
+                    {
+                        "chunk_id": chunk.chunk_id,
+                        "doc_id": chunk.doc_id,
+                        "fused_score": chunk.fused_score,
+                    }
+                    for chunk in fused[: self.settings.final_context_top_k]
+                ],
+            }
+        )
         return fused
 
     async def _dense_search(self, question: str, trace: NullTrace) -> list[RetrievedChunk]:
@@ -166,7 +195,12 @@ class QueryService:
         try:
             embedding = await self.embedding_provider.embed_query(question)
             chunks = await self.repository.dense_search(embedding, self.settings.dense_candidate_count)
-            span.end(output={"count": len(chunks)})
+            span.end(
+                output={
+                    "count": len(chunks),
+                    "usage_metadata": getattr(self.embedding_provider, "last_usage_metadata", {}),
+                }
+            )
             return chunks
         except Exception as exc:
             span.end(output={"fallback": "lexical_only", "error": str(exc)})
@@ -182,7 +216,19 @@ class QueryService:
                 fused_pool,
                 top_n=self.settings.rerank_top_k,
             )
-            span.end(output={"count": len(reranked)})
+            span.end(
+                output={
+                    "count": len(reranked),
+                    "top_chunks": [
+                        {
+                            "chunk_id": chunk.chunk_id,
+                            "doc_id": chunk.doc_id,
+                            "relevance_score": chunk.relevance_score,
+                        }
+                        for chunk in reranked[: self.settings.final_context_top_k]
+                    ],
+                }
+            )
             return reranked
         except Exception as exc:
             fallback = [chunk.model_copy() for chunk in fused_pool[: self.settings.rerank_top_k]]
@@ -190,7 +236,20 @@ class QueryService:
             for rank, chunk in enumerate(fallback, start=1):
                 normalized = (chunk.fused_score or 0.0) / top_score
                 chunk.relevance_score = max(normalized, max(0.0, 1.0 - ((rank - 1) * 0.1)))
-            span.end(output={"fallback": "pre_rerank_order", "error": str(exc)})
+            span.end(
+                output={
+                    "fallback": "pre_rerank_order",
+                    "error": str(exc),
+                    "top_chunks": [
+                        {
+                            "chunk_id": chunk.chunk_id,
+                            "doc_id": chunk.doc_id,
+                            "relevance_score": chunk.relevance_score,
+                        }
+                        for chunk in fallback[: self.settings.final_context_top_k]
+                    ],
+                }
+            )
             return fallback
 
     async def _generate(
@@ -210,11 +269,13 @@ class QueryService:
             context_chunks=context_chunks,
             retry_note=retry_note,
         )
+        usage_metadata = getattr(self.generation_provider, "last_usage_metadata", {})
         span.end(
             output={
                 "status": response.status,
                 "citation_count": len(response.citations),
                 "refusal_reason": response.refusal_reason,
+                "usage_metadata": usage_metadata,
             }
         )
         return response
@@ -227,7 +288,7 @@ class QueryService:
     ) -> ModelQueryResponse:
         try:
             return await self._generate(question, context_chunks, trace)
-        except Exception:
+        except MalformedModelOutputError:
             try:
                 return await self._generate(
                     question,
@@ -238,7 +299,7 @@ class QueryService:
                         "and refuse if the context cannot support the answer."
                     ),
                 )
-            except Exception:
+            except MalformedModelOutputError:
                 return ModelQueryResponse(
                     status="refused",
                     answer="",

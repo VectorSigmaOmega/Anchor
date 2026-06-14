@@ -20,25 +20,50 @@
     {
       "name": "dense_search",
       "output": {
-        "count": 6
+        "count": 6,
+        "usage_metadata": {
+          "promptTokenCount": 22
+        }
       }
     },
     {
       "name": "fusion",
       "output": {
-        "count": 8
+        "count": 8,
+        "top_chunks": [
+          {
+            "chunk_id": "rbi_kyc_2016::chunk_014",
+            "doc_id": "rbi_kyc_2016",
+            "fused_score": 0.0325
+          }
+        ]
       }
     },
     {
       "name": "rerank",
       "output": {
-        "count": 5
+        "count": 5,
+        "top_chunks": [
+          {
+            "chunk_id": "rbi_kyc_2016::chunk_014",
+            "doc_id": "rbi_kyc_2016",
+            "relevance_score": 0.91
+          }
+        ]
       }
     },
     {
       "name": "context_selection",
       "output": {
-        "context_count": 5
+        "context_count": 5,
+        "chunks": [
+          {
+            "chunk_id": "rbi_kyc_2016::chunk_014",
+            "doc_id": "rbi_kyc_2016",
+            "section_path": "Master Direction - Know Your Customer (KYC) Direction, 2016 > Customer Due Diligence (CDD) Procedure",
+            "relevance_score": 0.91
+          }
+        ]
       }
     },
     {
@@ -46,7 +71,12 @@
       "model": "gemini-2.5-flash",
       "output": {
         "status": "answered",
-        "citation_count": 2
+        "citation_count": 2,
+        "usage_metadata": {
+          "promptTokenCount": 1150,
+          "candidatesTokenCount": 132,
+          "totalTokenCount": 1282
+        }
       }
     },
     {
@@ -63,4 +93,3 @@
     "latency_ms": 1420
   }
 }
-

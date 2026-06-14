@@ -5,6 +5,9 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Anchor",
   description: "Grounded regulatory answers over official SEBI and RBI circulars.",
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 export default function RootLayout({

@@ -8,7 +8,7 @@ from anchor.ingest.fetch import DocumentFetcher, file_sha256
 from anchor.ingest.manifest import active_documents, load_manifest
 from anchor.ingest.parse import parse_document
 from anchor.logging import log_extra
-from anchor.providers.vertex import EmbeddingProvider
+from anchor.providers.gemini import EmbeddingProvider
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,12 @@ class IngestionService:
         docs_changed = 0
         docs_indexed = 0
         try:
-            for document in active_documents(manifest):
+            active_docs = active_documents(manifest)
+            deactivated_docs = await self.repository.deactivate_documents_not_in(
+                {document.doc_id for document in active_docs}
+            )
+            docs_changed += deactivated_docs
+            for document in active_docs:
                 docs_seen += 1
                 version = await self.repository.get_document_version(document.doc_id)
                 if version and version.sha256 == document.sha256 and version.chunk_count > 0:
@@ -78,4 +83,5 @@ class IngestionService:
             "docs_seen": docs_seen,
             "docs_changed": docs_changed,
             "docs_indexed": docs_indexed,
+            "docs_deactivated": deactivated_docs,
         }

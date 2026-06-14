@@ -81,11 +81,15 @@ MVP corpus rules:
 - superseded or dropped documents may be archived on disk, but are not searchable in MVP
 - the manifest records a corpus snapshot date and document hashes
 
-Target corpus size for MVP:
+Initial deployable corpus size for MVP:
 
-- 20 to 30 total documents
+- at least 16 total documents
 - at least 8 SEBI documents
 - at least 8 RBI documents
+
+Expansion target after reviewed eval coverage exists:
+
+- 20 to 30 total documents
 
 ### FR2 - Ingestion Pipeline
 
@@ -96,7 +100,7 @@ The ingestion pipeline shall:
 - extract text, headings, and tables from official source files
 - chunk documents into bounded sections with overlap
 - attach metadata to each chunk
-- generate embeddings with Vertex AI `gemini-embedding-2`
+- generate embeddings with Gemini API `gemini-embedding-2`
 - upsert documents, chunks, and embeddings into PostgreSQL plus pgvector
 
 Re-ingestion shall be idempotent. Unchanged documents must be skipped.
@@ -122,7 +126,7 @@ MVP retrieval is intentionally simple:
 
 The generator shall:
 
-- use Vertex AI `gemini-2.5-flash` as the default generation model
+- use Gemini API `gemini-2.5-flash` as the default generation model
 - accept the user query and selected context chunks
 - return structured output conforming to the API contract in `docs/SPEC.md`
 - answer only from supplied context
@@ -221,9 +225,9 @@ If any of the above is missing, the MVP is not done.
 The following decisions are resolved for MVP and should not be reopened during implementation:
 
 - domain: SEBI Master Circulars plus RBI Master Directions only
-- generation provider: Vertex AI
+- generation provider: Gemini Developer API
 - generation model: `gemini-2.5-flash`
-- embedding provider: Vertex AI
+- embedding provider: Gemini Developer API
 - embedding model: `gemini-embedding-2`
 - reranking provider: Cohere Rerank API
 - observability provider: Langfuse Cloud for private traces, exported snapshots for public review

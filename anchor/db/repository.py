@@ -164,6 +164,33 @@ class AnchorRepository:
                     )
             await conn.commit()
 
+    async def deactivate_documents_not_in(self, active_doc_ids: set[str]) -> int:
+        async with self.db.connection() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    """
+                    UPDATE documents
+                    SET is_active = FALSE,
+                        updated_at = NOW()
+                    WHERE is_active = TRUE
+                      AND NOT (doc_id = ANY(%s))
+                    RETURNING doc_id
+                    """,
+                    (list(active_doc_ids),),
+                )
+                rows = await cur.fetchall()
+                deactivated_doc_ids = [row["doc_id"] for row in rows]
+                if deactivated_doc_ids:
+                    await cur.execute(
+                        """
+                        DELETE FROM chunks
+                        WHERE doc_id = ANY(%s)
+                        """,
+                        (deactivated_doc_ids,),
+                    )
+            await conn.commit()
+        return len(deactivated_doc_ids)
+
     async def increment_daily_usage(self, ip_hash: str) -> int:
         usage_day = datetime.now(UTC).date()
         async with self.db.connection() as conn:

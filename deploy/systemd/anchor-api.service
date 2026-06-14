@@ -8,7 +8,7 @@ User=anchor
 Group=anchor
 WorkingDirectory=/opt/anchor/current
 EnvironmentFile=/etc/anchor/anchor.env
-ExecStart=/opt/anchor/current/.venv/bin/python -m uvicorn anchor.api.app:create_app --factory --host 127.0.0.1 --port 8000
+ExecStart=/opt/anchor/current/.venv/bin/python -m uvicorn anchor.api.app:create_app --factory --host 127.0.0.1 --port 8010
 Restart=always
 RestartSec=5
 

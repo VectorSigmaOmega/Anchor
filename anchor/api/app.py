@@ -4,15 +4,15 @@ from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import ORJSONResponse, Response
+from fastapi.responses import JSONResponse, Response
 
 from anchor.config import get_settings
 from anchor.db.pool import Database
 from anchor.db.repository import AnchorRepository
 from anchor.logging import configure_logging
 from anchor.pipeline.service import DISCLAIMER, QueryService
+from anchor.providers.gemini import GeminiEmbeddingProvider, GeminiGenerationProvider, ProviderError
 from anchor.providers.rerank import CohereRerankProvider
-from anchor.providers.vertex import VertexEmbeddingProvider, VertexGenerationProvider
 from anchor.schemas import QueryRequest, QueryResponse
 from anchor.services.metrics import Metrics
 from anchor.services.rate_limit import RateLimiter, RateLimitExceeded
@@ -24,12 +24,13 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
+    settings.validate_query_runtime()
     configure_logging(settings.log_level)
     database = Database(settings)
     await database.open()
     repository = AnchorRepository(database, settings)
-    embedding_provider = VertexEmbeddingProvider(settings)
-    generation_provider = VertexGenerationProvider(settings)
+    embedding_provider = GeminiEmbeddingProvider(settings)
+    generation_provider = GeminiGenerationProvider(settings)
     rerank_provider = CohereRerankProvider(settings)
     tracer = Tracer(settings)
     metrics = Metrics(settings.metrics_namespace)
@@ -59,7 +60,6 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Anchor API",
         version="0.1.0",
-        default_response_class=ORJSONResponse,
         lifespan=lifespan,
     )
     app.add_middleware(
@@ -99,7 +99,9 @@ def create_app() -> FastAPI:
                 status_code=422,
                 detail=f"question must be between 1 and {settings.max_query_chars} characters",
             )
-        ip_address = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+        ip_address = request.headers.get("x-real-ip", "").strip()
+        if not ip_address:
+            ip_address = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
         if not ip_address:
             ip_address = request.client.host if request.client else "unknown"
         request_id = request.headers.get("x-request-id") or str(uuid4())
@@ -127,8 +129,21 @@ def create_app() -> FastAPI:
                     "latency_ms": result.latency_ms,
                 }
             )
-            return ORJSONResponse(status_code=429, content=result.model_dump())
-        result = await request.app.state.query_service.execute(question, request_id=request_id)
+            return JSONResponse(status_code=429, content=result.model_dump(mode="json"))
+        try:
+            result = await request.app.state.query_service.execute(question, request_id=request_id)
+        except ProviderError as exc:
+            logger.exception(
+                "upstream_provider_error",
+                extra={
+                    "extra_fields": {
+                        "request_id": request_id,
+                        "provider": exc.provider,
+                        "provider_status_code": exc.status_code,
+                    }
+                },
+            )
+            raise HTTPException(status_code=504, detail="upstream provider unavailable") from exc
         return result.response
 
     return app

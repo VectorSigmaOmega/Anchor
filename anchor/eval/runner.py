@@ -10,8 +10,8 @@ from anchor.config import get_settings
 from anchor.db.pool import Database
 from anchor.db.repository import AnchorRepository
 from anchor.pipeline.service import QueryService
+from anchor.providers.gemini import GeminiEmbeddingProvider, GeminiGenerationProvider
 from anchor.providers.rerank import CohereRerankProvider
-from anchor.providers.vertex import VertexEmbeddingProvider, VertexGenerationProvider
 from anchor.schemas import Citation, EvalRow, QueryExecutionResult, QueryResponse
 from anchor.services.metrics import Metrics
 from anchor.services.tracing import Tracer
@@ -91,14 +91,15 @@ class LiveEvalService:
 
 async def build_live_eval_service() -> LiveEvalService:
     settings = get_settings()
+    settings.validate_query_runtime()
     database = Database(settings)
     await database.open()
     repository = AnchorRepository(database, settings)
     query_service = QueryService(
         settings=settings,
         repository=repository,
-        embedding_provider=VertexEmbeddingProvider(settings),
-        generation_provider=VertexGenerationProvider(settings),
+        embedding_provider=GeminiEmbeddingProvider(settings),
+        generation_provider=GeminiGenerationProvider(settings),
         rerank_provider=CohereRerankProvider(settings),
         tracer=Tracer(settings),
         metrics=Metrics(f"{settings.metrics_namespace}_eval"),
@@ -175,10 +176,38 @@ def smoke_passes(metrics: dict[str, float]) -> bool:
 def render_markdown(mode: str, fixture_mode: bool, metrics: dict[str, float]) -> str:
     mode_label = "Smoke" if mode == "smoke" else "Full"
     execution_label = "fixture mode" if fixture_mode else "live query service"
+    current_status = [
+        "## Current Status",
+        "",
+    ]
+    if fixture_mode:
+        current_status.extend(
+            [
+                "- Verified locally: fixture smoke evaluation path.",
+                "- Not yet verified: live full evaluation against an indexed PostgreSQL corpus and real Gemini/Cohere API calls.",
+                (
+                    "- Production-readiness implication: the current checked-in metrics prove eval plumbing only. "
+                    "They do not prove retrieval quality, refusal quality, latency, or grounded answer quality in production."
+                ),
+                "",
+            ]
+        )
+    else:
+        current_status.extend(
+            [
+                "- Verified: live query service evaluation against the configured corpus and provider credentials.",
+                (
+                    "- Production-readiness implication: compare these metrics against the PRD thresholds before "
+                    "claiming production readiness."
+                ),
+                "",
+            ]
+        )
     return "\n".join(
         [
             "# Anchor Evaluation",
             "",
+            *current_status,
             "## Latest Run",
             "",
             f"- Mode: {mode_label}",
@@ -192,7 +221,10 @@ def render_markdown(mode: str, fixture_mode: bool, metrics: dict[str, float]) ->
             "",
             "## Method",
             "",
-            "- Full eval runs the direct query service against the indexed corpus when cloud credentials and PostgreSQL are available.",
+            (
+                "- Full eval runs the direct query service against the indexed corpus when Gemini/Cohere credentials "
+                "and PostgreSQL are available."
+            ),
             (
                 "- CI smoke eval runs against the fixed `eval/smoke.jsonl` subset in fixture mode to "
                 "validate the benchmark path without external providers."
@@ -202,6 +234,15 @@ def render_markdown(mode: str, fixture_mode: bool, metrics: dict[str, float]) ->
                 "whose `doc_id` matches the expected document set."
             ),
             "- Groundedness is tracked as a citation-overlap proxy against the reviewed reference set.",
+            "",
+            "## Required Before Production Claim",
+            "",
+            "- Run `python eval/run.py --write-docs` with a populated database and real provider credentials.",
+            (
+                "- Replace or supplement the generated seed questions with reviewed regulatory QA items that test actual "
+                "document obligations, thresholds, exceptions, and refusal boundaries."
+            ),
+            "- Publish the resulting full-eval metrics here with the run date and corpus snapshot date.",
         ]
     )
 

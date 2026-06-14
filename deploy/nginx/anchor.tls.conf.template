@@ -2,11 +2,30 @@ limit_req_zone $binary_remote_addr zone=anchor_rpm:10m rate=10r/m;
 
 server {
     listen 80;
-    server_name _;
+    server_name __ANCHOR_DOMAIN__;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    server_name __ANCHOR_DOMAIN__;
+
+    ssl_certificate /etc/letsencrypt/live/__ANCHOR_DOMAIN__/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/__ANCHOR_DOMAIN__/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
 
     root /var/www/anchor/ui;
     index index.html;
 
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
     add_header X-Frame-Options "DENY" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "same-origin" always;
@@ -23,30 +42,30 @@ server {
 
     location /query {
         limit_req zone=anchor_rpm burst=5 nodelay;
-        proxy_pass http://127.0.0.1:8000/query;
+        proxy_pass http://127.0.0.1:8010/query;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $remote_addr;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Proto https;
         proxy_read_timeout 30s;
     }
 
     location = /healthz {
-        proxy_pass http://127.0.0.1:8000/healthz;
+        proxy_pass http://127.0.0.1:8010/healthz;
         proxy_set_header Host $host;
     }
 
     location = /readyz {
         allow 127.0.0.1;
         deny all;
-        proxy_pass http://127.0.0.1:8000/readyz;
+        proxy_pass http://127.0.0.1:8010/readyz;
     }
 
     location = /metrics {
         allow 127.0.0.1;
         deny all;
-        proxy_pass http://127.0.0.1:8000/metrics;
+        proxy_pass http://127.0.0.1:8010/metrics;
     }
 
     location / {
