@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     embedding_model: str = "gemini-embedding-2"
     embedding_dimension: int = 768
     embedding_batch_size: int = 32
+    embedding_batch_pause_seconds: float = 35.0
+    gemini_max_retries: int = 8
+    gemini_retry_base_seconds: float = 20.0
+    gemini_retry_max_seconds: float = 180.0
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""
     langfuse_host: str = "https://cloud.langfuse.com"

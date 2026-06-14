@@ -90,8 +90,9 @@ class GeminiAPIClient:
                 provider="gemini",
             )
         response: httpx.Response | None = None
+        max_retries = max(1, self.settings.gemini_max_retries)
         async with httpx.AsyncClient(timeout=self.settings.request_timeout_seconds) as client:
-            for attempt in range(1, 6):
+            for attempt in range(1, max_retries + 1):
                 try:
                     response = await client.post(
                         f"{self.base_url}/{path.lstrip('/')}",
@@ -102,7 +103,7 @@ class GeminiAPIClient:
                         json=payload,
                     )
                 except httpx.HTTPError as exc:
-                    if attempt == 5:
+                    if attempt == max_retries:
                         raise ProviderError(
                             f"Gemini API request failed: {exc}",
                             provider="gemini",
@@ -111,10 +112,17 @@ class GeminiAPIClient:
                     continue
                 if response.status_code not in {429, 500, 502, 503, 504}:
                     break
-                if attempt == 5:
+                if attempt == max_retries:
                     break
                 retry_after = response.headers.get("retry-after")
-                delay = float(retry_after) if retry_after and retry_after.isdecimal() else min(60.0, 5.0 * attempt)
+                delay = (
+                    float(retry_after)
+                    if retry_after and retry_after.replace(".", "", 1).isdigit()
+                    else min(
+                        self.settings.gemini_retry_max_seconds,
+                        self.settings.gemini_retry_base_seconds * attempt,
+                    )
+                )
                 await asyncio.sleep(delay)
         if response is None:
             raise ProviderError(
@@ -153,6 +161,8 @@ class GeminiEmbeddingProvider:
                     task_type="RETRIEVAL_DOCUMENT",
                 )
             )
+            if start + batch_size < len(texts) and self.settings.embedding_batch_pause_seconds > 0:
+                await asyncio.sleep(self.settings.embedding_batch_pause_seconds)
         return embeddings
 
     async def embed_query(self, text: str) -> list[float]:

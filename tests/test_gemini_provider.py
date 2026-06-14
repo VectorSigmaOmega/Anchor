@@ -115,6 +115,26 @@ def test_embedding_provider_batches_document_embeddings() -> None:
     assert provider.last_usage_metadata["promptTokenCount"] == 10
 
 
+def test_embedding_provider_paces_document_embedding_batches(monkeypatch: pytest.MonkeyPatch) -> None:
+    sleeps: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    settings_obj = settings()
+    settings_obj.embedding_batch_size = 1
+    settings_obj.embedding_batch_pause_seconds = 12.5
+    provider = GeminiEmbeddingProvider(settings_obj)
+    provider.client = FakeGeminiClient({"embeddings": [{"values": [0.0] * 768}]})  # type: ignore[assignment]
+    monkeypatch.setattr(gemini.asyncio, "sleep", fake_sleep)
+
+    vectors = asyncio.run(provider.embed_documents(["one", "two", "three"]))
+
+    assert len(vectors) == 3
+    assert len(provider.client.calls) == 3  # type: ignore[attr-defined]
+    assert sleeps == [12.5, 12.5]
+
+
 def test_api_client_wraps_transport_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     async def no_sleep(seconds: float) -> None:
         return None
