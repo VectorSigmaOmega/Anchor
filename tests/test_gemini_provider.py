@@ -89,6 +89,32 @@ def test_embedding_provider_uses_retrieval_config() -> None:
     assert payload["embedContentConfig"]["outputDimensionality"] == 768
 
 
+def test_embedding_provider_batches_document_embeddings() -> None:
+    settings_obj = settings()
+    settings_obj.embedding_batch_size = 2
+    provider = GeminiEmbeddingProvider(settings_obj)
+    provider.client = FakeGeminiClient(
+        {
+            "embeddings": [
+                {"values": [0.1] * 768},
+                {"values": [0.2] * 768},
+            ],
+            "usageMetadata": {"promptTokenCount": 10},
+        }
+    )  # type: ignore[assignment]
+
+    vectors = asyncio.run(provider.embed_documents(["one", "two"]))
+
+    assert len(vectors) == 2
+    path, payload = provider.client.calls[0]  # type: ignore[attr-defined]
+    assert path == "gemini-embedding-2:batchEmbedContents"
+    assert len(payload["requests"]) == 2
+    assert payload["requests"][0]["model"] == "models/gemini-embedding-2"
+    assert payload["requests"][0]["embedContentConfig"]["taskType"] == "RETRIEVAL_DOCUMENT"
+    assert payload["requests"][0]["embedContentConfig"]["outputDimensionality"] == 768
+    assert provider.last_usage_metadata["promptTokenCount"] == 10
+
+
 def test_api_client_wraps_transport_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     async def no_sleep(seconds: float) -> None:
         return None

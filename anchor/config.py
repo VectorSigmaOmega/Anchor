@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     generation_model: str = "gemini-2.5-flash"
     embedding_model: str = "gemini-embedding-2"
     embedding_dimension: int = 768
+    embedding_batch_size: int = 32
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""
     langfuse_host: str = "https://cloud.langfuse.com"

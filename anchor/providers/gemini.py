@@ -145,12 +145,48 @@ class GeminiEmbeddingProvider:
 
     async def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
         embeddings: list[list[float]] = []
-        for text in texts:
-            embeddings.append(await self._embed(text, task_type="RETRIEVAL_DOCUMENT"))
+        batch_size = max(1, self.settings.embedding_batch_size)
+        for start in range(0, len(texts), batch_size):
+            embeddings.extend(
+                await self._embed_batch(
+                    texts[start : start + batch_size],
+                    task_type="RETRIEVAL_DOCUMENT",
+                )
+            )
         return embeddings
 
     async def embed_query(self, text: str) -> list[float]:
         return await self._embed(text, task_type="RETRIEVAL_QUERY")
+
+    async def _embed_batch(self, texts: Sequence[str], *, task_type: str) -> list[list[float]]:
+        if not texts:
+            return []
+        model = _model_resource(self.settings.embedding_model)
+        payload = await self.client.post(
+            f"{self.settings.embedding_model}:batchEmbedContents",
+            {
+                "requests": [
+                    {
+                        "model": model,
+                        "content": {"parts": [{"text": text}]},
+                        "embedContentConfig": {
+                            "taskType": task_type,
+                            "outputDimensionality": self.settings.embedding_dimension,
+                        },
+                    }
+                    for text in texts
+                ]
+            },
+        )
+        self.last_usage_metadata = payload.get("usageMetadata") or {}
+        embeddings = payload.get("embeddings")
+        if not isinstance(embeddings, list):
+            raise MalformedModelOutputError("Gemini batch embedding response did not contain embeddings")
+        if len(embeddings) != len(texts):
+            raise MalformedModelOutputError(
+                f"Gemini batch embedding count mismatch: expected {len(texts)}, got {len(embeddings)}"
+            )
+        return [self._parse_embedding(embedding) for embedding in embeddings]
 
     async def _embed(self, text: str, *, task_type: str) -> list[float]:
         payload = await self.client.post(
@@ -165,7 +201,10 @@ class GeminiEmbeddingProvider:
             },
         )
         self.last_usage_metadata = payload.get("usageMetadata") or {}
-        values = payload.get("embedding", {}).get("values")
+        return self._parse_embedding(payload.get("embedding"))
+
+    def _parse_embedding(self, embedding_payload: Any) -> list[float]:
+        values = embedding_payload.get("values") if isinstance(embedding_payload, dict) else None
         if not isinstance(values, list):
             raise MalformedModelOutputError("Gemini embedding response did not contain values")
         embedding = [float(value) for value in values]
