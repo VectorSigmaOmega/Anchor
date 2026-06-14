@@ -92,7 +92,7 @@ jobs:
             sudo sed "s/__ANCHOR_DOMAIN__/$ANCHOR_DOMAIN/g" deploy/nginx/anchor.tls.conf.template | sudo tee /etc/nginx/sites-available/anchor >/dev/null
             sudo mkdir -p /etc/nginx/sites-enabled
             sudo ln -sfn /etc/nginx/sites-available/anchor /etc/nginx/sites-enabled/anchor
-            if [ ! -f "/etc/letsencrypt/live/$ANCHOR_DOMAIN/fullchain.pem" ]; then
+            if ! sudo test -f "/etc/letsencrypt/live/$ANCHOR_DOMAIN/fullchain.pem"; then
               sudo mkdir -p /var/www/certbot
               sudo tee /etc/nginx/sites-available/anchor-bootstrap >/dev/null <<EOF
             server {
@@ -113,8 +113,8 @@ jobs:
               sudo certbot certonly --webroot -w /var/www/certbot -d "$ANCHOR_DOMAIN" --agree-tos -m "$LETSENCRYPT_EMAIL" --non-interactive
               sudo ln -sfn /etc/nginx/sites-available/anchor /etc/nginx/sites-enabled/anchor
             fi
-            test -f "/etc/letsencrypt/live/$ANCHOR_DOMAIN/fullchain.pem"
-            test -f "/etc/letsencrypt/live/$ANCHOR_DOMAIN/privkey.pem"
+            sudo test -f "/etc/letsencrypt/live/$ANCHOR_DOMAIN/fullchain.pem"
+            sudo test -f "/etc/letsencrypt/live/$ANCHOR_DOMAIN/privkey.pem"
             sudo nginx -t
             sudo systemctl restart anchor-api
             sudo nginx -s reload
