@@ -11,3 +11,7 @@
   - Include Gemini request path, configured model, batch size, attempt number, and calculated backoff delay in structured logs.
   - Track embedding ingestion counters per document and per batch so long runs show visible progress before the final DB run update.
   - Distinguish quota exhaustion, billing/project mismatch, model-specific batch limits, transient overload, and malformed request errors in operator-facing messages.
+
+## Corpus Verification
+
+- Manually verify all SEBI corpus documents before production sign-off. Confirm each selected SEBI source is up to date, the document body contains the expected full file contents, and no source file or download is missing from the pinned manifest.
