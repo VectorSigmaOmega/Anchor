@@ -26,7 +26,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://anchor:anchor@localhost:5432/anchor
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      GENERATION_MODEL: gemini-2.5-flash
+      GENERATION_MODEL: gemini-3-flash-preview
       EMBEDDING_MODEL: gemini-embedding-2
       EMBEDDING_DIMENSION: 768
       COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}

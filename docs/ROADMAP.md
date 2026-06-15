@@ -7,6 +7,7 @@
 - Add operator-visible query diagnostics for refused answers: top retrieved doc IDs, rerank scores, support-count decision, refusal reason, and whether generation was attempted. Keep user-facing responses clean.
 - Resolve or explicitly accept the frontend `npm audit` high/moderate findings before production sign-off.
 - Review GitHub Actions Node.js 20 deprecation warnings and upgrade/replace actions before they become blocking.
+- Redesign `full-eval` so scheduled CI does not rebuild the entire corpus from scratch before every eval. The 2026-06-15 scheduled run spent 4h43m in ingestion, hit repeated Gemini embedding 429s, then failed before eval on a transient RBI document hash mismatch. Prefer a smaller smoke corpus for CI and a separate manual/staging workflow for full corpus evals.
 
 ## Provider Follow-Ups
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from hashlib import sha256
 from pathlib import Path
+from urllib.parse import urlparse
 
 import httpx
 
@@ -34,12 +35,16 @@ class DocumentFetcher:
             for attempt in range(1, 5):
                 temp_path.unlink(missing_ok=True)
                 try:
+                    content_type = None
+                    final_url = document.source_url
                     async with client.stream(
                         "GET",
                         document.source_url,
                         headers={"User-Agent": "anchor-ingest/0.1"},
                     ) as response:
                         response.raise_for_status()
+                        content_type = response.headers.get("content-type")
+                        final_url = str(response.url)
                         with temp_path.open("wb") as handle:
                             async for chunk in response.aiter_bytes():
                                 handle.write(chunk)
@@ -47,7 +52,14 @@ class DocumentFetcher:
                     if digest == document.sha256:
                         temp_path.replace(target)
                         return target
-                    last_error = ValueError(f"hash mismatch for {document.doc_id}")
+                    byte_count = temp_path.stat().st_size
+                    last_error = ValueError(
+                        "hash mismatch for "
+                        f"{document.doc_id}: expected={document.sha256} "
+                        f"actual={digest} bytes={byte_count} "
+                        f"content_type={content_type or 'unknown'} "
+                        f"final_url={_safe_url(final_url)}"
+                    )
                 except Exception as exc:
                     last_error = exc
                 temp_path.unlink(missing_ok=True)
@@ -56,3 +68,10 @@ class DocumentFetcher:
         if last_error:
             raise last_error
         raise ValueError(f"failed to fetch {document.doc_id}")
+
+
+def _safe_url(url: str) -> str:
+    parsed = urlparse(url)
+    if not parsed.query and not parsed.fragment:
+        return url
+    return parsed._replace(query="", fragment="").geturl()

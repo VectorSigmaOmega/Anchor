@@ -51,3 +51,40 @@ async def test_fetch_retries_hash_mismatch(tmp_path, monkeypatch) -> None:
 
     assert path.read_bytes() == expected
     assert route.call_count == 2
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_fetch_hash_mismatch_reports_diagnostics(tmp_path, monkeypatch) -> None:
+    async def no_sleep(seconds: float) -> None:
+        return None
+
+    monkeypatch.setattr(fetch.asyncio, "sleep", no_sleep)
+    expected_digest = sha256(b"expected").hexdigest()
+    actual = b"bad download"
+    actual_digest = sha256(actual).hexdigest()
+    route = respx.get("https://www.sebi.gov.in/sebi_data/attachdocs/test.pdf").mock(
+        return_value=httpx.Response(
+            200,
+            content=actual,
+            headers={"content-type": "application/pdf"},
+        )
+    )
+    settings = Settings.model_validate(
+        {
+            "database_url": "postgresql://anchor:anchor@localhost:5432/anchor",
+            "raw_corpus_dir": tmp_path,
+        }
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        await DocumentFetcher(settings).fetch(fetch_doc(expected_digest))
+
+    message = str(exc_info.value)
+    assert "hash mismatch for sebi_test" in message
+    assert f"expected={expected_digest}" in message
+    assert f"actual={actual_digest}" in message
+    assert "bytes=12" in message
+    assert "content_type=application/pdf" in message
+    assert "final_url=https://www.sebi.gov.in/sebi_data/attachdocs/test.pdf" in message
+    assert route.call_count == 4
