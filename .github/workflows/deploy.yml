@@ -78,7 +78,7 @@ jobs:
             .venv/bin/pip install --upgrade pip
             .venv/bin/pip install .
             cd ui
-            npm ci
+            npm ci --no-audit --no-fund
             npm run build
             sudo mkdir -p /var/www/anchor/ui
             sudo rsync -a --delete out/ /var/www/anchor/ui/
