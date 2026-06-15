@@ -284,39 +284,35 @@ class GeminiGenerationProvider:
             "generationConfig": {
                 "temperature": 0,
                 "maxOutputTokens": self.settings.max_completion_tokens,
-                "responseFormat": {
-                    "text": {
-                        "mimeType": "application/json",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "status": {"type": "string", "enum": ["answered", "refused"]},
-                                "answer": {"type": "string"},
-                                "refusal_reason": {
-                                    "type": "string",
-                                    "enum": [
-                                        "not_in_corpus",
-                                        "insufficient_support",
-                                        "ambiguous_question",
-                                        "rate_limited",
-                                    ],
-                                },
-                                "citations": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "object",
-                                        "properties": {
-                                            "chunk_id": {"type": "string"},
-                                        },
-                                        "required": ["chunk_id"],
-                                        "additionalProperties": False,
-                                    },
-                                },
-                            },
-                            "required": ["status", "answer", "citations"],
-                            "additionalProperties": False,
+                "responseMimeType": "application/json",
+                "responseJsonSchema": {
+                    "type": "object",
+                    "properties": {
+                        "status": {"type": "string", "enum": ["answered", "refused"]},
+                        "answer": {"type": "string"},
+                        "refusal_reason": {
+                            "type": "string",
+                            "enum": [
+                                "not_in_corpus",
+                                "insufficient_support",
+                                "ambiguous_question",
+                                "rate_limited",
+                            ],
                         },
-                    }
+                        "citations": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "chunk_id": {"type": "string"},
+                                },
+                                "required": ["chunk_id"],
+                                "additionalProperties": False,
+                            },
+                        },
+                    },
+                    "required": ["status", "answer", "citations"],
+                    "additionalProperties": False,
                 },
             },
         }

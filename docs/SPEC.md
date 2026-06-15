@@ -6,7 +6,7 @@ This document is the implementation contract for MVP. If `PRD.md` explains *what
 
 Default model assignments:
 
-- `GENERATION_MODEL=gemini-2.5-flash`
+- `GENERATION_MODEL=gemini-3-flash-preview`
 - `EMBEDDING_MODEL=gemini-embedding-2`
 - `RERANK_MODEL=rerank-v4.0-pro`
 - `EMBEDDING_DIMENSION=768`
@@ -14,7 +14,7 @@ Default model assignments:
 Rules:
 
 - defaults must point to stable models only
-- the generation default intentionally uses the stable alias `gemini-2.5-flash`
+- the generation default uses `gemini-3-flash-preview`; revisit this when a stable Gemini 3 Flash model ID is available
 - model ids are environment-configurable
 - changing a model id is a config change plus service restart, not a code change
 

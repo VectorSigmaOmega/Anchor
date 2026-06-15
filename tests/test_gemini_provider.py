@@ -144,7 +144,7 @@ def test_api_client_wraps_transport_errors(monkeypatch: pytest.MonkeyPatch) -> N
     client = GeminiAPIClient(settings())
 
     with pytest.raises(ProviderError):
-        asyncio.run(client.post("gemini-2.5-flash:generateContent", {}))
+        asyncio.run(client.post("gemini-3-flash-preview:generateContent", {}))
 
 
 def test_api_client_retries_rate_limits(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -156,7 +156,7 @@ def test_api_client_retries_rate_limits(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setattr(httpx, "AsyncClient", RateLimitThenSuccessAsyncClient)
     client = GeminiAPIClient(settings())
 
-    assert asyncio.run(client.post("gemini-2.5-flash:generateContent", {})) == {"ok": True}
+    assert asyncio.run(client.post("gemini-3-flash-preview:generateContent", {})) == {"ok": True}
     assert RateLimitThenSuccessAsyncClient.calls == 2
 
 
@@ -165,7 +165,7 @@ def test_api_client_wraps_invalid_json(monkeypatch: pytest.MonkeyPatch) -> None:
     client = GeminiAPIClient(settings())
 
     with pytest.raises(ProviderError):
-        asyncio.run(client.post("gemini-2.5-flash:generateContent", {}))
+        asyncio.run(client.post("gemini-3-flash-preview:generateContent", {}))
 
 
 def test_generation_provider_parses_structured_output_and_records_usage() -> None:
@@ -205,4 +205,5 @@ def test_generation_provider_parses_structured_output_and_records_usage() -> Non
     assert provider.last_usage_metadata["totalTokenCount"] == 15
     _, payload = provider.client.calls[0]  # type: ignore[attr-defined]
     assert "systemInstruction" in payload
-    assert payload["generationConfig"]["responseFormat"]["text"]["mimeType"] == "application/json"
+    assert payload["generationConfig"]["responseMimeType"] == "application/json"
+    assert "responseJsonSchema" in payload["generationConfig"]

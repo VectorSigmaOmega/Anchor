@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     database_url: str
     gemini_api_key: str = ""
     gemini_api_base_url: str = "https://generativelanguage.googleapis.com/v1beta/models"
-    generation_model: str = "gemini-2.5-flash"
+    generation_model: str = "gemini-3-flash-preview"
     embedding_model: str = "gemini-embedding-2"
     embedding_dimension: int = 768
     embedding_batch_size: int = 32

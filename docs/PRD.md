@@ -126,7 +126,7 @@ MVP retrieval is intentionally simple:
 
 The generator shall:
 
-- use Gemini API `gemini-2.5-flash` as the default generation model
+- use Gemini API `gemini-3-flash-preview` as the default generation model
 - accept the user query and selected context chunks
 - return structured output conforming to the API contract in `docs/SPEC.md`
 - answer only from supplied context
@@ -226,7 +226,7 @@ The following decisions are resolved for MVP and should not be reopened during i
 
 - domain: SEBI Master Circulars plus RBI Master Directions only
 - generation provider: Gemini Developer API
-- generation model: `gemini-2.5-flash`
+- generation model: `gemini-3-flash-preview`
 - embedding provider: Gemini Developer API
 - embedding model: `gemini-embedding-2`
 - reranking provider: Cohere Rerank API

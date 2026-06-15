@@ -124,7 +124,7 @@ The database is the single retrieval system for MVP. No separate vector database
 Used for:
 
 - embeddings via `gemini-embedding-2`
-- answer generation via `gemini-2.5-flash`
+- answer generation via `gemini-3-flash-preview`
 
 Only stable model defaults are allowed in production config.
 
@@ -178,7 +178,7 @@ Public reviewers do not get live access by default. Sanitized trace snapshots ar
 5. RRF fuses both ranked lists
 6. Cohere reranks the fused candidate set
 7. Top context chunks are selected
-8. `gemini-2.5-flash` generates structured output from only the selected context
+8. `gemini-3-flash-preview` generates structured output from only the selected context
 9. Citation validator confirms every citation maps to a provided chunk
 10. Response is returned to the browser
 
@@ -188,7 +188,7 @@ Public reviewers do not get live access by default. Sanitized trace snapshots ar
 |---|---|---|
 | API framework | FastAPI | typed, small, reliable |
 | LLM app library | first-party Gemini API adapter | keeps provider calls inspectable and avoids cloud service-account setup |
-| Generation model | Gemini API `gemini-2.5-flash` | stable managed model, good price/performance |
+| Generation model | Gemini API `gemini-3-flash-preview` | Gemini 3 Flash Developer API model currently available as preview |
 | Embeddings | Gemini API `gemini-embedding-2` | current Google embedding model |
 | Reranking | Cohere Rerank API | hosted reranking without operating a separate service |
 | Retrieval store | PostgreSQL + pgvector | one DB for lexical and dense retrieval |
