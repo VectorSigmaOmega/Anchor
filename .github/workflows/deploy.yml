@@ -24,6 +24,12 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
     env:
       ANCHOR_DOMAIN: ${{ secrets.ANCHOR_DOMAIN }}
+      ANCHOR_DB_PASSWORD: ${{ secrets.ANCHOR_DB_PASSWORD }}
+      COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      LANGFUSE_HOST: ${{ secrets.LANGFUSE_HOST }}
+      LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+      LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
       LETSENCRYPT_EMAIL: ${{ secrets.LETSENCRYPT_EMAIL }}
       RELEASE_ID: ${{ github.sha }}-${{ github.run_id }}
       RUN_INGEST: ${{ github.event.inputs.run_ingest || 'false' }}
@@ -50,25 +56,73 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          envs: ANCHOR_DOMAIN,LETSENCRYPT_EMAIL,RELEASE_ID,RUN_INGEST
+          envs: ANCHOR_DOMAIN,ANCHOR_DB_PASSWORD,COHERE_API_KEY,GEMINI_API_KEY,LANGFUSE_HOST,LANGFUSE_PUBLIC_KEY,LANGFUSE_SECRET_KEY,LETSENCRYPT_EMAIL,RELEASE_ID,RUN_INGEST
           command_timeout: 120m
           script: |
             set -euo pipefail
             test -n "$ANCHOR_DOMAIN"
+            test -n "$ANCHOR_DB_PASSWORD"
+            test -n "$GEMINI_API_KEY"
+            test -n "$COHERE_API_KEY"
+            test -n "$LANGFUSE_PUBLIC_KEY"
+            test -n "$LANGFUSE_SECRET_KEY"
+            test -n "$LETSENCRYPT_EMAIL"
             if ! id anchor >/dev/null 2>&1; then
               sudo useradd --system --home /opt/anchor --shell /usr/sbin/nologin anchor
             fi
             sudo apt-get update
             sudo apt-get install -y \
               certbot \
+              curl \
               nginx \
-              nodejs \
-              npm \
+              postgresql \
               postgresql-client \
+              postgresql-contrib \
+              postgresql-16-pgvector \
               python3-certbot-nginx \
               python3-venv \
               rsync
-            test -f /etc/anchor/anchor.env
+            if ! command -v node >/dev/null 2>&1 || [ "$(node -p 'Number(process.versions.node.split(".")[0])')" -lt 20 ]; then
+              curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+              sudo apt-get install -y nodejs
+            fi
+            sudo systemctl enable --now postgresql
+            sudo -u postgres psql -v ON_ERROR_STOP=1 <<SQL
+            DO \$\$
+            BEGIN
+              IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'anchor') THEN
+                CREATE ROLE anchor LOGIN PASSWORD '$ANCHOR_DB_PASSWORD';
+              ELSE
+                ALTER ROLE anchor WITH LOGIN PASSWORD '$ANCHOR_DB_PASSWORD';
+              END IF;
+            END
+            \$\$;
+            SELECT 'CREATE DATABASE anchor OWNER anchor'
+            WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'anchor')\gexec
+            SQL
+            sudo -u postgres psql -d anchor -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS vector;"
+            sudo install -d -m 0750 -o root -g anchor /etc/anchor
+            sudo tee /etc/anchor/anchor.env >/dev/null <<ANCHOR_ENV
+            DATABASE_URL=postgresql://anchor:$ANCHOR_DB_PASSWORD@localhost:5432/anchor
+            ENVIRONMENT=production
+            GEMINI_API_KEY=$GEMINI_API_KEY
+            GEMINI_API_BASE_URL=https://generativelanguage.googleapis.com/v1beta/models
+            GENERATION_MODEL=gemini-3-flash-preview
+            EMBEDDING_MODEL=gemini-embedding-2
+            EMBEDDING_DIMENSION=768
+            COHERE_API_KEY=$COHERE_API_KEY
+            RERANK_MODEL=rerank-v4.0-pro
+            RATE_LIMIT_RPM=10
+            RATE_LIMIT_RPD=100
+            MAX_QUERY_CHARS=800
+            CORS_ORIGIN=https://$ANCHOR_DOMAIN
+            LANGFUSE_HOST=$LANGFUSE_HOST
+            LANGFUSE_PUBLIC_KEY=$LANGFUSE_PUBLIC_KEY
+            LANGFUSE_SECRET_KEY=$LANGFUSE_SECRET_KEY
+            LOG_LEVEL=INFO
+            ANCHOR_ENV
+            sudo chown root:anchor /etc/anchor/anchor.env
+            sudo chmod 0640 /etc/anchor/anchor.env
             sudo mkdir -p "/opt/anchor/releases/$RELEASE_ID"
             sudo tar -xzf /tmp/anchor-release.tgz -C "/opt/anchor/releases/$RELEASE_ID"
             sudo chown -R "$USER":"$USER" "/opt/anchor/releases/$RELEASE_ID"
@@ -95,10 +149,78 @@ jobs:
             sudo install -m 0644 deploy/systemd/anchor-ingest.service /etc/systemd/system/anchor-ingest.service
             sudo systemctl daemon-reload
             sudo systemctl enable anchor-api
-            sudo sed "s/__ANCHOR_DOMAIN__/$ANCHOR_DOMAIN/g" deploy/nginx/anchor.tls.conf.template | sudo tee /etc/nginx/sites-available/anchor >/dev/null
             sudo mkdir -p /etc/nginx/sites-enabled
-            sudo ln -sfn /etc/nginx/sites-available/anchor /etc/nginx/sites-enabled/anchor
-            if ! sudo test -f "/etc/letsencrypt/live/$ANCHOR_DOMAIN/fullchain.pem"; then
+            server_ip="$(curl -fsS https://api.ipify.org || hostname -I | awk '{print $1}')"
+            domain_points_to_server="false"
+            if getent ahostsv4 "$ANCHOR_DOMAIN" | awk '{print $1}' | sort -u | grep -Fx "$server_ip" >/dev/null; then
+              domain_points_to_server="true"
+            fi
+            if sudo test -f "/etc/letsencrypt/live/$ANCHOR_DOMAIN/fullchain.pem" || [ "$domain_points_to_server" = "true" ]; then
+              sudo sed "s/__ANCHOR_DOMAIN__/$ANCHOR_DOMAIN/g" deploy/nginx/anchor.tls.conf.template | sudo tee /etc/nginx/sites-available/anchor >/dev/null
+              sudo ln -sfn /etc/nginx/sites-available/anchor /etc/nginx/sites-enabled/anchor
+            else
+              sudo tee /etc/nginx/sites-available/anchor >/dev/null <<ANCHOR_HTTP
+            limit_req_zone \$binary_remote_addr zone=anchor_rpm:10m rate=10r/m;
+
+            server {
+                listen 80;
+                listen [::]:80;
+                server_name $ANCHOR_DOMAIN;
+
+                root /var/www/anchor/ui;
+                index index.html;
+
+                add_header X-Frame-Options "DENY" always;
+                add_header X-Content-Type-Options "nosniff" always;
+                add_header Referrer-Policy "same-origin" always;
+
+                location = / {
+                    try_files /index.html =404;
+                }
+
+                location /_next/ {
+                    try_files \$uri =404;
+                    access_log off;
+                    expires 1h;
+                }
+
+                location /query {
+                    limit_req zone=anchor_rpm burst=5 nodelay;
+                    proxy_pass http://127.0.0.1:8010/query;
+                    proxy_http_version 1.1;
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_set_header X-Forwarded-For \$remote_addr;
+                    proxy_set_header X-Forwarded-Proto \$scheme;
+                    proxy_read_timeout 30s;
+                }
+
+                location = /healthz {
+                    proxy_pass http://127.0.0.1:8010/healthz;
+                    proxy_set_header Host \$host;
+                }
+
+                location = /readyz {
+                    allow 127.0.0.1;
+                    deny all;
+                    proxy_pass http://127.0.0.1:8010/readyz;
+                }
+
+                location = /metrics {
+                    allow 127.0.0.1;
+                    deny all;
+                    proxy_pass http://127.0.0.1:8010/metrics;
+                }
+
+                location / {
+                    try_files \$uri \$uri/ /index.html;
+                }
+            }
+            ANCHOR_HTTP
+              sudo ln -sfn /etc/nginx/sites-available/anchor /etc/nginx/sites-enabled/anchor
+              echo "DNS for $ANCHOR_DOMAIN does not point to $server_ip yet; installed temporary HTTP-only nginx config."
+            fi
+            if ! sudo test -f "/etc/letsencrypt/live/$ANCHOR_DOMAIN/fullchain.pem" && [ "$domain_points_to_server" = "true" ]; then
               sudo mkdir -p /var/www/certbot
               sudo tee /etc/nginx/sites-available/anchor-bootstrap >/dev/null <<EOF
             server {
@@ -119,8 +241,6 @@ jobs:
               sudo certbot certonly --webroot -w /var/www/certbot -d "$ANCHOR_DOMAIN" --agree-tos -m "$LETSENCRYPT_EMAIL" --non-interactive
               sudo ln -sfn /etc/nginx/sites-available/anchor /etc/nginx/sites-enabled/anchor
             fi
-            sudo test -f "/etc/letsencrypt/live/$ANCHOR_DOMAIN/fullchain.pem"
-            sudo test -f "/etc/letsencrypt/live/$ANCHOR_DOMAIN/privkey.pem"
             sudo nginx -t
             sudo systemctl restart anchor-api
             sudo nginx -s reload
