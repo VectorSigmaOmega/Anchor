@@ -127,14 +127,11 @@ jobs:
             sudo mkdir -p /var/www/anchor/ui
             sudo rsync -a --delete out/ /var/www/anchor/ui/
             cd /opt/anchor/current
-            set -a
-            . /etc/anchor/anchor.env
-            set +a
-            .venv/bin/python -m anchor.db.migrate
-            if [ "$RUN_INGEST" = "true" ]; then
-              .venv/bin/python -m anchor.ingest.cli
-            fi
             sudo chown -R anchor:anchor "/opt/anchor/releases/$RELEASE_ID"
+            sudo -u anchor bash -lc "cd /opt/anchor/current && set -a && . /etc/anchor/anchor.env && set +a && .venv/bin/python -m anchor.db.migrate"
+            if [ "$RUN_INGEST" = "true" ]; then
+              sudo -u anchor bash -lc "cd /opt/anchor/current && set -a && . /etc/anchor/anchor.env && set +a && .venv/bin/python -m anchor.ingest.cli"
+            fi
             sudo install -m 0644 deploy/systemd/anchor-api.service /etc/systemd/system/anchor-api.service
             sudo install -m 0644 deploy/systemd/anchor-ingest.service /etc/systemd/system/anchor-ingest.service
             sudo systemctl daemon-reload
