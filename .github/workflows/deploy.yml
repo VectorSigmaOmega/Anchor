@@ -32,31 +32,17 @@ jobs:
       LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
       LETSENCRYPT_EMAIL: ${{ secrets.LETSENCRYPT_EMAIL }}
       RELEASE_ID: ${{ github.sha }}-${{ github.run_id }}
+      RELEASE_SHA: ${{ github.sha }}
       RUN_INGEST: ${{ github.event.inputs.run_ingest || 'false' }}
 
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Upload release bundle
-        run: |
-          tar -czf anchor-release.tgz anchor ui deploy corpus eval docs pyproject.toml Makefile README.md docker-compose.yml .env.example
-
-      - name: Copy release bundle to VPS
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          source: "anchor-release.tgz"
-          target: "/tmp"
-
       - name: Restart application
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          envs: ANCHOR_DOMAIN,ANCHOR_DB_PASSWORD,COHERE_API_KEY,GEMINI_API_KEY,LANGFUSE_HOST,LANGFUSE_PUBLIC_KEY,LANGFUSE_SECRET_KEY,LETSENCRYPT_EMAIL,RELEASE_ID,RUN_INGEST
+          envs: ANCHOR_DOMAIN,ANCHOR_DB_PASSWORD,COHERE_API_KEY,GEMINI_API_KEY,LANGFUSE_HOST,LANGFUSE_PUBLIC_KEY,LANGFUSE_SECRET_KEY,LETSENCRYPT_EMAIL,RELEASE_ID,RELEASE_SHA,RUN_INGEST
           command_timeout: 120m
           script: |
             set -euo pipefail
@@ -123,8 +109,12 @@ jobs:
             ANCHOR_ENV
             sudo chown root:anchor /etc/anchor/anchor.env
             sudo chmod 0640 /etc/anchor/anchor.env
+            release_src="$(mktemp -d)"
+            git clone https://github.com/VectorSigmaOmega/Anchor.git "$release_src"
+            git -C "$release_src" checkout "$RELEASE_SHA"
             sudo mkdir -p "/opt/anchor/releases/$RELEASE_ID"
-            sudo tar -xzf /tmp/anchor-release.tgz -C "/opt/anchor/releases/$RELEASE_ID"
+            sudo rsync -a --delete --exclude .git "$release_src"/ "/opt/anchor/releases/$RELEASE_ID"/
+            rm -rf "$release_src"
             sudo chown -R "$USER":"$USER" "/opt/anchor/releases/$RELEASE_ID"
             sudo ln -sfn "/opt/anchor/releases/$RELEASE_ID" /opt/anchor/current
             cd /opt/anchor/current
