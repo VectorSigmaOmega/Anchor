@@ -55,7 +55,7 @@ Last updated: 2026-06-14T20:14:46Z.
 - Production is not signed off until full corpus ingestion succeeds and live `/query` is verified.
 - The active ingestion run may be slow because it is conservatively paced around Gemini embedding `429` responses.
 - The user checked AI Studio and reported `gemini-embedding-2` was not near RPM or input TPM limits. Treat this as unresolved. The next code change should capture sanitized Gemini 429 response bodies and relevant response headers.
-- Current generation model is `gemini-3-flash-preview`; promote to the stable Gemini 3 Flash model ID when Google publishes one for the Developer API.
+- Current generation model target is `gemini-3.1-flash-lite` with minimal thinking and a 1024-token output cap. Move up to a larger stable Flash model only if smoke/full eval shows grounded-answer quality gaps.
 - Current embedding model is `gemini-embedding-2`.
 - Current Langfuse integration is fail-open/no-op if the installed SDK does not support the assumed `.trace()` API.
 - `npm ci` reported frontend vulnerabilities during deploy: 1 moderate and 1 high. Not yet remediated.

@@ -11,7 +11,7 @@
 
 ## Provider Follow-Ups
 
-- Promote generation from `gemini-3-flash-preview` to the stable Gemini 3 Flash model ID when Google publishes one for the Developer API.
+- Evaluate `gemini-3.1-flash-lite` with `GENERATION_THINKING_LEVEL=minimal` as the first stable production generation model. Move up to `gemini-3.5-flash-lite`, `gemini-3.5-flash`, or `gemini-3.6-flash` only if smoke/full eval shows grounded-answer quality gaps.
 - Replace the current fail-open Langfuse compatibility wrapper with a real Langfuse v4/OpenTelemetry tracing integration. Preserve fail-open behavior, but emit actual query spans/generations with request ID, retrieval stages, selected citations, model usage metadata, refusal reason, and final status.
 - Investigate the `gemini-embedding-2` ingestion 429s against the AI Studio quota dashboard. Current deploy logs showed 429 responses from `gemini-embedding-2:batchEmbedContents`, but the dashboard did not appear close to requests-per-minute or input-tokens-per-minute limits. Capture provider error response bodies safely, without API keys, before making further throttling decisions.
 - Improve Gemini diagnostics before changing throttling again:

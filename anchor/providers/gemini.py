@@ -284,6 +284,9 @@ class GeminiGenerationProvider:
             "generationConfig": {
                 "temperature": 0,
                 "maxOutputTokens": self.settings.max_completion_tokens,
+                "thinkingConfig": {
+                    "thinkingLevel": self.settings.generation_thinking_level,
+                },
                 "responseMimeType": "application/json",
                 "responseJsonSchema": {
                     "type": "object",

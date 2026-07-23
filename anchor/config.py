@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -17,7 +18,8 @@ class Settings(BaseSettings):
     database_url: str
     gemini_api_key: str = ""
     gemini_api_base_url: str = "https://generativelanguage.googleapis.com/v1beta/models"
-    generation_model: str = "gemini-3-flash-preview"
+    generation_model: str = "gemini-3.1-flash-lite"
+    generation_thinking_level: Literal["minimal", "low", "medium", "high"] = "minimal"
     embedding_model: str = "gemini-embedding-2"
     embedding_dimension: int = 768
     embedding_batch_size: int = 32
@@ -33,7 +35,7 @@ class Settings(BaseSettings):
     rate_limit_rpm: int = 10
     rate_limit_rpd: int = 100
     max_query_chars: int = 800
-    max_completion_tokens: int = 512
+    max_completion_tokens: int = 1024
     rrf_constant: int = 60
     lexical_candidate_count: int = 30
     dense_candidate_count: int = 30

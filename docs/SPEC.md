@@ -6,7 +6,8 @@ This document is the implementation contract for MVP. If `PRD.md` explains *what
 
 Default model assignments:
 
-- `GENERATION_MODEL=gemini-3-flash-preview`
+- `GENERATION_MODEL=gemini-3.1-flash-lite`
+- `GENERATION_THINKING_LEVEL=minimal`
 - `EMBEDDING_MODEL=gemini-embedding-2`
 - `RERANK_MODEL=rerank-v4.0-pro`
 - `EMBEDDING_DIMENSION=768`
@@ -14,7 +15,8 @@ Default model assignments:
 Rules:
 
 - defaults must point to stable models only
-- the generation default uses `gemini-3-flash-preview`; revisit this when a stable Gemini 3 Flash model ID is available
+- the generation default starts with `gemini-3.1-flash-lite`; move up to a larger stable Flash model only if smoke/full eval shows quality gaps
+- generation uses minimal thinking for grounded retrieval responses; increase to `low` only if evaluation justifies the latency/cost tradeoff
 - model ids are environment-configurable
 - changing a model id is a config change plus service restart, not a code change
 
@@ -395,6 +397,7 @@ Required for query API and live eval:
 
 - `GEMINI_API_KEY`
 - `GENERATION_MODEL`
+- `GENERATION_THINKING_LEVEL`
 - `EMBEDDING_MODEL`
 - `EMBEDDING_DIMENSION`
 - `COHERE_API_KEY`
@@ -414,7 +417,7 @@ Recommended defaults:
 - `RATE_LIMIT_RPD=100`
 - `MAX_QUERY_CHARS=800`
 - `EMBEDDING_DIMENSION=768`
-- `MAX_COMPLETION_TOKENS=512`
+- `MAX_COMPLETION_TOKENS=1024`
 
 Recommended optional environment variables:
 

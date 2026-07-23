@@ -144,7 +144,7 @@ def test_api_client_wraps_transport_errors(monkeypatch: pytest.MonkeyPatch) -> N
     client = GeminiAPIClient(settings())
 
     with pytest.raises(ProviderError):
-        asyncio.run(client.post("gemini-3-flash-preview:generateContent", {}))
+        asyncio.run(client.post("gemini-3.1-flash-lite:generateContent", {}))
 
 
 def test_api_client_retries_rate_limits(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -156,7 +156,7 @@ def test_api_client_retries_rate_limits(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setattr(httpx, "AsyncClient", RateLimitThenSuccessAsyncClient)
     client = GeminiAPIClient(settings())
 
-    assert asyncio.run(client.post("gemini-3-flash-preview:generateContent", {})) == {"ok": True}
+    assert asyncio.run(client.post("gemini-3.1-flash-lite:generateContent", {})) == {"ok": True}
     assert RateLimitThenSuccessAsyncClient.calls == 2
 
 
@@ -165,7 +165,7 @@ def test_api_client_wraps_invalid_json(monkeypatch: pytest.MonkeyPatch) -> None:
     client = GeminiAPIClient(settings())
 
     with pytest.raises(ProviderError):
-        asyncio.run(client.post("gemini-3-flash-preview:generateContent", {}))
+        asyncio.run(client.post("gemini-3.1-flash-lite:generateContent", {}))
 
 
 def test_generation_provider_parses_structured_output_and_records_usage() -> None:
@@ -203,7 +203,10 @@ def test_generation_provider_parses_structured_output_and_records_usage() -> Non
 
     assert result.status == "answered"
     assert provider.last_usage_metadata["totalTokenCount"] == 15
-    _, payload = provider.client.calls[0]  # type: ignore[attr-defined]
+    path, payload = provider.client.calls[0]  # type: ignore[attr-defined]
     assert "systemInstruction" in payload
+    assert path == "gemini-3.1-flash-lite:generateContent"
+    assert payload["generationConfig"]["maxOutputTokens"] == 1024
+    assert payload["generationConfig"]["thinkingConfig"] == {"thinkingLevel": "minimal"}
     assert payload["generationConfig"]["responseMimeType"] == "application/json"
     assert "responseJsonSchema" in payload["generationConfig"]
