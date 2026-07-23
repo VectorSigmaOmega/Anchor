@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import Sequence
 from uuid import uuid4
 
 from anchor.config import Settings
@@ -13,12 +14,34 @@ from anchor.pipeline.refusal import refusal_reason_for_context
 from anchor.pipeline.rrf import fuse_ranked_chunks
 from anchor.providers.gemini import EmbeddingProvider, GenerationProvider, MalformedModelOutputError
 from anchor.providers.rerank import RerankProvider
-from anchor.schemas import ModelQueryResponse, QueryExecutionResult, QueryResponse, RetrievedChunk
+from anchor.schemas import ConversationTurn, ModelQueryResponse, QueryExecutionResult, QueryResponse, RetrievedChunk
 from anchor.services.metrics import Metrics
 from anchor.services.tracing import NullTrace, Tracer
 
 logger = logging.getLogger(__name__)
 DISCLAIMER = "Demo only. Not legal or financial advice."
+MAX_CONTEXT_TURNS = 4
+MAX_CONTEXT_TURN_CHARS = 800
+
+
+def contextualize_question(question: str, history: Sequence[ConversationTurn]) -> str:
+    if not history:
+        return question
+
+    recent_turns = history[-MAX_CONTEXT_TURNS:]
+    rendered_turns = []
+    for turn in recent_turns:
+        compact_content = " ".join(turn.content.split())[:MAX_CONTEXT_TURN_CHARS]
+        rendered_turns.append(f"{turn.role.title()}: {compact_content}")
+
+    return "\n".join(
+        [
+            "Prior conversation (use only to resolve the current question):",
+            *rendered_turns,
+            "",
+            f"Current question: {question}",
+        ]
+    )
 
 
 class QueryService:
@@ -41,10 +64,16 @@ class QueryService:
         self.tracer = tracer
         self.metrics = metrics
 
-    async def execute(self, question: str, request_id: str | None = None) -> QueryExecutionResult:
+    async def execute(
+        self,
+        question: str,
+        request_id: str | None = None,
+        history: Sequence[ConversationTurn] | None = None,
+    ) -> QueryExecutionResult:
         request_id = request_id or str(uuid4())
         started = time.perf_counter()
         trace = self.tracer.start_query_trace(request_id=request_id, question=question)
+        contextual_question = contextualize_question(question, history or [])
         response: QueryResponse | None = None
         reranked: list[RetrievedChunk] = []
         context_chunks: list[RetrievedChunk] = []
@@ -52,12 +81,12 @@ class QueryService:
             request_validation = trace.span("request_validation", input={"question_length": len(question)})
             request_validation.end(output={"valid": True})
             lexical_chunks, dense_chunks = await asyncio.gather(
-                self._lexical_search(question, trace),
-                self._dense_search(question, trace),
+                self._lexical_search(contextual_question, trace),
+                self._dense_search(contextual_question, trace),
             )
             fused_chunks = self._fuse(lexical_chunks, dense_chunks, trace)
             fused_pool = fused_chunks[: self.settings.rerank_candidate_count]
-            reranked = await self._rerank(question, fused_pool, trace)
+            reranked = await self._rerank(contextual_question, fused_pool, trace)
             context_span = trace.span("context_selection", input={"reranked_count": len(reranked)})
             context_chunks = reranked[: self.settings.final_context_top_k]
             context_span.end(
@@ -74,11 +103,11 @@ class QueryService:
                     ],
                 }
             )
-            refusal_reason = refusal_reason_for_context(question, reranked, context_chunks, self.settings)
+            refusal_reason = refusal_reason_for_context(contextual_question, reranked, context_chunks, self.settings)
             if refusal_reason:
                 response = self._refusal_response(request_id, refusal_reason, started)
             else:
-                model_response = await self._generate_with_retry(question, context_chunks, trace)
+                model_response = await self._generate_with_retry(contextual_question, context_chunks, trace)
                 validation_span = trace.span(
                     "response_validation",
                     input={"model_status": model_response.status},
@@ -89,7 +118,7 @@ class QueryService:
                 if not hydrated[0]:
                     try:
                         retry_response = await self._generate(
-                            question,
+                            contextual_question,
                             context_chunks,
                             trace,
                             retry_note=(

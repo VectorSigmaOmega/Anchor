@@ -58,8 +58,8 @@ The following are explicitly out of scope:
 
 - tax laws or Income Tax Act content
 - multilingual queries
-- multi-turn chat memory
-- user accounts, saved sessions, or history
+- server-side long-term chat memory
+- user accounts or server-synced conversation history
 - document upload by end users
 - self-hosted LLM or embedding inference
 - self-hosted reranker service
@@ -119,7 +119,7 @@ The retriever shall:
 MVP retrieval is intentionally simple:
 
 - hosted reranking is allowed, but no self-hosted reranker service
-- no query rewriting
+- no model-driven query rewriting; recent turns may be boundedly prepended to resolve follow-up references
 - no multi-hop agent workflow
 
 ### FR4 - Generation
@@ -127,7 +127,7 @@ MVP retrieval is intentionally simple:
 The generator shall:
 
 - use Gemini API `gemini-3-flash-preview` as the default generation model
-- accept the user query and selected context chunks
+- accept the current user query, bounded recent conversation context, and selected context chunks
 - return structured output conforming to the API contract in `docs/SPEC.md`
 - answer only from supplied context
 - refuse when support is insufficient

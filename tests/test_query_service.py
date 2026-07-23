@@ -1,6 +1,6 @@
 from anchor.config import Settings
-from anchor.pipeline.service import QueryService
-from anchor.schemas import ModelCitation, ModelQueryResponse, QueryExecutionResult, RetrievedChunk
+from anchor.pipeline.service import QueryService, contextualize_question
+from anchor.schemas import ConversationTurn, ModelCitation, ModelQueryResponse, QueryExecutionResult, RetrievedChunk
 from anchor.services.metrics import Metrics
 from anchor.services.tracing import Tracer
 
@@ -82,6 +82,26 @@ class FakeRerankProvider:
             copy.relevance_score = 0.9 if index == 1 else 0.5
             reranked.append(copy)
         return reranked
+
+
+def test_contextualize_question_adds_recent_history() -> None:
+    question = contextualize_question(
+        "What about those steps for NBFCs?",
+        [
+            ConversationTurn(
+                role="user",
+                content="What customer due diligence steps does the RBI KYC direction require?",
+            ),
+            ConversationTurn(
+                role="assistant",
+                content="The direction requires identification and verification before account opening.",
+            ),
+        ],
+    )
+
+    assert "User: What customer due diligence steps" in question
+    assert "Assistant: The direction requires identification" in question
+    assert question.endswith("Current question: What about those steps for NBFCs?")
 
 
 def test_query_service_answer_path() -> None:

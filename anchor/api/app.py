@@ -131,7 +131,11 @@ def create_app() -> FastAPI:
             )
             return JSONResponse(status_code=429, content=result.model_dump(mode="json"))
         try:
-            result = await request.app.state.query_service.execute(question, request_id=request_id)
+            result = await request.app.state.query_service.execute(
+                question,
+                request_id=request_id,
+                history=payload.history,
+            )
         except ProviderError as exc:
             logger.exception(
                 "upstream_provider_error",

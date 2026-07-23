@@ -1,0 +1,232 @@
+/* ============================================================
+   ANCHOR — LANDING (brand register)
+   One screen, no gratuitous scroll. Copy and the ask box on the
+   left; a real grounded answer on the right so the proof lives in
+   the same view. Monochrome with pine only on links and citations.
+   ============================================================ */
+
+.landing {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--paper);
+}
+
+.lp-bar,
+.lp-main,
+.lp-foot {
+  width: 100%;
+  max-width: 72rem;
+  margin-inline: auto;
+  padding-inline: clamp(1.4rem, 6vw, 4.5rem);
+}
+
+/* ---- top bar ---- */
+.lp-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-block: 1.15rem;
+}
+.lp-bar-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--ink-2);
+  text-decoration: none;
+  transition: color 150ms var(--ease);
+}
+.lp-bar-link:hover {
+  color: var(--ink);
+}
+.lp-bar-link svg {
+  transition: transform 160ms var(--ease);
+}
+.lp-bar-link:hover svg {
+  transform: translateX(2px);
+}
+
+/* ---- main: two columns, vertically centred in the viewport ---- */
+.lp-main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
+  align-items: center;
+  gap: clamp(2rem, 5vw, 4.5rem);
+  padding-block: clamp(1.5rem, 4vh, 3rem);
+}
+@media (max-width: 58rem) {
+  .lp-main {
+    grid-template-columns: 1fr;
+    align-items: start;
+    gap: 2.5rem;
+    padding-block: 2rem 3rem;
+  }
+}
+
+.lp-left {
+  min-width: 0;
+}
+.lp-h1 {
+  margin: 0;
+  font-family: var(--font-sans), sans-serif;
+  font-weight: 800;
+  font-size: clamp(2.1rem, 4.6vw, 3.1rem);
+  line-height: 1.03;
+  letter-spacing: -0.035em;
+  color: var(--ink);
+  text-wrap: balance;
+}
+.lp-lede {
+  margin: 1.4rem 0 0;
+  max-width: 42ch;
+  font-size: clamp(1rem, 1.4vw, 1.12rem);
+  line-height: 1.52;
+  color: var(--ink-2);
+}
+.lp-ask {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1.9rem;
+  max-width: 33rem;
+}
+.lp-ask-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.8rem 0.95rem;
+  font: inherit;
+  font-size: 1rem;
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-element);
+  transition: border-color 150ms var(--ease), box-shadow 150ms var(--ease);
+}
+.lp-ask-input::placeholder {
+  color: var(--ink-3);
+}
+.lp-ask-input:focus {
+  outline: none;
+  border-color: var(--focus);
+  box-shadow: inset 0 0 0 1px var(--focus);
+}
+.lp-ask-submit {
+  flex: none;
+  padding-inline: 1.15rem;
+}
+@media (max-width: 30rem) {
+  .lp-ask {
+    flex-direction: column;
+  }
+  .lp-ask-submit {
+    width: 100%;
+    padding-block: 0.72rem;
+  }
+}
+.lp-examples {
+  margin: 1.1rem 0 0;
+  font-size: 0.95rem;
+  line-height: 1.9;
+  color: var(--ink-3);
+}
+.lp-examples-label {
+  margin-right: 0.3rem;
+}
+.lp-examples-sep {
+  margin: 0 0.35rem 0 0;
+  color: var(--ink-3);
+}
+
+/* ---- right column: a real grounded answer (proof, in view) ---- */
+.lp-demo {
+  min-width: 0;
+  padding-left: clamp(1.5rem, 3vw, 2.75rem);
+  border-left: 1px solid var(--rule);
+}
+@media (max-width: 58rem) {
+  .lp-demo {
+    padding-left: 0;
+    padding-top: 2rem;
+    border-left: none;
+    border-top: 1px solid var(--rule);
+    max-width: 42rem;
+  }
+}
+.lp-demo-label {
+  margin: 0 0 0.9rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink-3);
+}
+.lp-demo-q {
+  margin: 0 0 0.75rem;
+  font-size: 1.02rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--ink);
+}
+.lp-demo-a {
+  margin: 0;
+  font-size: 0.98rem;
+  line-height: 1.62;
+  color: var(--ink-2);
+}
+.lp-cite {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--accent-strong);
+  vertical-align: super;
+  line-height: 0;
+  margin-left: 1px;
+}
+.lp-demo-src {
+  list-style: none;
+  margin: 1.25rem 0 0;
+  padding: 0;
+  counter-reset: src;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.lp-demo-src li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.88rem;
+  line-height: 1.4;
+  color: var(--ink-2);
+  counter-increment: src;
+}
+.lp-demo-src li::before {
+  content: counter(src);
+  flex: none;
+  min-width: 0.9rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--accent-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- footer ---- */
+.lp-foot {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem 1rem;
+  padding-block: 1.5rem;
+  border-top: 1px solid var(--rule);
+  font-size: 0.8rem;
+  color: var(--ink-3);
+}
+.lp-foot-corpus {
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.lp-foot-note {
+  color: var(--ink-3);
+}

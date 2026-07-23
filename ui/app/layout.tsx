@@ -1,10 +1,19 @@
 import type { Metadata } from "next";
+import { Archivo } from "next/font/google";
 
 import "./globals.css";
 
+const sans = Archivo({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-sans",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
-  title: "Anchor",
-  description: "Grounded regulatory answers over official SEBI and RBI circulars.",
+  title: "Anchor — sourced answers on RBI & SEBI regulation",
+  description:
+    "Ask a question about Indian financial regulation and get an answer drawn only from official RBI Master Directions and SEBI Master Circulars, with the exact citations, or a clear refusal.",
   icons: {
     icon: "/icon.svg",
   },
@@ -16,7 +25,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html
+      lang="en"
+      data-theme="light"
+      data-astryx-theme="neutral"
+      className={sans.variable}
+    >
       <body>{children}</body>
     </html>
   );

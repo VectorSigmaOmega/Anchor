@@ -27,11 +27,23 @@ Implementation note:
 
 ### `POST /query`
 
+The request accepts a required `question` and up to six optional recent conversation turns. History is used only to resolve follow-up references and is not stored server-side. Existing one-shot clients may omit `history`.
+
 Request:
 
 ```json
 {
-  "question": "What are the KYC requirements for small accounts?"
+  "question": "What changes for non-face-to-face onboarding?",
+  "history": [
+    {
+      "role": "user",
+      "content": "What customer due diligence steps apply to individuals?"
+    },
+    {
+      "role": "assistant",
+      "content": "The direction requires identification and verification before account opening."
+    }
+  ]
 }
 ```
 
@@ -39,7 +51,8 @@ Validation rules:
 
 - `question` is required
 - trimmed length must be between `1` and `MAX_QUERY_CHARS`
-- no additional fields are required in MVP
+- `history` is optional and may contain up to six `user` or `assistant` turns
+- each history turn is trimmed, capped at 2,000 characters, and is not persisted by the API
 
 Success response:
 

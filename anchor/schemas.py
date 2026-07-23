@@ -4,13 +4,24 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
+class ConversationTurn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("content", mode="before")
+    @classmethod
+    def strip_content(cls, value: str) -> str:
+        return value.strip() if isinstance(value, str) else value
+
+
 class QueryRequest(BaseModel):
     question: str = Field(min_length=1)
+    history: list[ConversationTurn] = Field(default_factory=list, max_length=6)
 
-    @field_validator("question")
+    @field_validator("question", mode="before")
     @classmethod
     def strip_question(cls, value: str) -> str:
-        return value.strip()
+        return value.strip() if isinstance(value, str) else value
 
 
 class ModelCitation(BaseModel):

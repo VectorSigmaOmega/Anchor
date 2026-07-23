@@ -115,7 +115,7 @@ The database is the single retrieval system for MVP. No separate vector database
 ### 3.5 anchor-ui
 
 - static Next.js export served by nginx
-- one page with query input, answer panel, refusal state, and citation list
+- one conversational workspace with local history, follow-up context, refusal states, and citations attached to each answer
 - no client-side API keys
 - no auth flows
 
