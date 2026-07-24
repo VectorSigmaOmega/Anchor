@@ -1,8 +1,10 @@
 /* ============================================================
    ANCHOR — LANDING (brand register)
-   One screen, no gratuitous scroll. Copy and the ask box on the
-   left; a real grounded answer on the right so the proof lives in
-   the same view. Monochrome with pine only on links and citations.
+   One screen, no scroll. A drafting-instrument frame: hairline
+   under the bar, hairline column rule, hairline above the footer.
+   The right column replays a real console exchange: the answer
+   streams in, each claim drops its citation, sources rise last.
+   Monochrome with pine only on the live things.
    ============================================================ */
 
 .landing {
@@ -27,7 +29,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-block: 1.15rem;
+  padding-block: 1.05rem;
+  border-bottom: 1px solid var(--rule-2);
 }
 .lp-bar-link {
   display: inline-flex;
@@ -43,43 +46,49 @@
   color: var(--ink);
 }
 .lp-bar-link svg {
-  transition: transform 160ms var(--ease);
+  transition: transform 160ms var(--ease-out);
 }
 .lp-bar-link:hover svg {
   transform: translateX(2px);
 }
 
-/* ---- main: two columns, vertically centred in the viewport ---- */
+/* ---- main: copy left, live proof right, one rule between ---- */
 .lp-main {
   flex: 1;
+  min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
   align-items: center;
   gap: clamp(2rem, 5vw, 4.5rem);
-  padding-block: clamp(1.5rem, 4vh, 3rem);
-}
-@media (max-width: 58rem) {
-  .lp-main {
-    grid-template-columns: 1fr;
-    align-items: start;
-    gap: 2.5rem;
-    padding-block: 2rem 3rem;
-  }
 }
 
 .lp-left {
   min-width: 0;
+  padding-block: clamp(1.5rem, 4vh, 3rem);
 }
+
+/* ---- display type: same family, wider stance ---- */
 .lp-h1 {
   margin: 0;
-  font-family: var(--font-sans), sans-serif;
   font-weight: 800;
-  font-size: clamp(2.1rem, 4.6vw, 3.1rem);
-  line-height: 1.03;
-  letter-spacing: -0.035em;
+  font-stretch: 122%;
+  /* scale with width, but never taller than the short-laptop viewport allows */
+  font-size: clamp(2.05rem, min(4.4vw, 7.4vh), 3rem);
+  line-height: 1.04;
+  letter-spacing: -0.022em;
   color: var(--ink);
-  text-wrap: balance;
 }
+.lp-h1-mask {
+  display: block;
+  overflow: hidden;
+  /* keep descenders inside the clip */
+  padding-bottom: 0.09em;
+  margin-bottom: -0.09em;
+}
+.lp-h1-line {
+  display: block;
+}
+
 .lp-lede {
   margin: 1.4rem 0 0;
   max-width: 42ch;
@@ -87,6 +96,8 @@
   line-height: 1.52;
   color: var(--ink-2);
 }
+
+/* ---- the ask box, the only primary CTA ---- */
 .lp-ask {
   display: flex;
   gap: 0.5rem;
@@ -110,12 +121,18 @@
 }
 .lp-ask-input:focus {
   outline: none;
-  border-color: var(--focus);
-  box-shadow: inset 0 0 0 1px var(--focus);
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px oklch(0.26 0.014 220 / 0.08);
 }
 .lp-ask-submit {
   flex: none;
   padding-inline: 1.15rem;
+}
+.lp-ask-submit svg {
+  transition: transform 160ms var(--ease-out);
+}
+.lp-ask-submit:hover svg {
+  transform: translateX(2px);
 }
 @media (max-width: 30rem) {
   .lp-ask {
@@ -126,41 +143,68 @@
     padding-block: 0.72rem;
   }
 }
-.lp-examples {
-  margin: 1.1rem 0 0;
-  font-size: 0.95rem;
-  line-height: 1.9;
-  color: var(--ink-3);
+
+/* ---- example questions, same chips as the console ---- */
+.lp-try {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1.1rem;
 }
-.lp-examples-label {
-  margin-right: 0.3rem;
-}
-.lp-examples-sep {
-  margin: 0 0.35rem 0 0;
+.lp-try-label {
+  margin-right: 0.1rem;
+  font-size: 0.88rem;
   color: var(--ink-3);
+  white-space: nowrap;
+}
+.lp-try .chip {
+  padding: 0.4rem 0.7rem;
+  font-size: 0.84rem;
 }
 
-/* ---- right column: a real grounded answer (proof, in view) ---- */
+/* ---- right column: the console, replayed ---- */
 .lp-demo {
   min-width: 0;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   padding-left: clamp(1.5rem, 3vw, 2.75rem);
+  padding-block: clamp(1.5rem, 4vh, 3rem);
   border-left: 1px solid var(--rule);
 }
-@media (max-width: 58rem) {
-  .lp-demo {
-    padding-left: 0;
-    padding-top: 2rem;
-    border-left: none;
-    border-top: 1px solid var(--rule);
-    max-width: 42rem;
-  }
+.lp-demo-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.9rem;
 }
 .lp-demo-label {
-  margin: 0 0 0.9rem;
-  font-size: 0.78rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--ink-3);
+}
+.lp-replay {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--ink-3);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color 140ms var(--ease);
+}
+.lp-replay:hover {
+  color: var(--ink);
 }
 .lp-demo-q {
   margin: 0 0 0.75rem;
@@ -175,40 +219,63 @@
   line-height: 1.62;
   color: var(--ink-2);
 }
+
+/* words hold their layout from the start; only their ink arrives */
+.dw {
+  opacity: 0;
+}
+.dw.on {
+  opacity: 1;
+  transition: opacity 140ms linear;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dw {
+    opacity: 1;
+  }
+}
+
+.lp-hold {
+  white-space: nowrap;
+}
+
+.lp-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 1px;
+  vertical-align: -0.12em;
+  background: var(--accent-strong);
+}
+
 .lp-cite {
   font-size: 0.62rem;
   font-weight: 700;
   color: var(--accent-strong);
   vertical-align: super;
   line-height: 0;
+  padding: 0.15em 0.25em;
   margin-left: 1px;
+  border-radius: 3px;
+  transition: background-color 140ms var(--ease);
 }
-.lp-demo-src {
-  list-style: none;
-  margin: 1.25rem 0 0;
-  padding: 0;
-  counter-reset: src;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+.lp-cite[data-hi="true"],
+.lp-cite:hover {
+  background: var(--accent-soft);
 }
-.lp-demo-src li {
-  display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
+
+/* sources reuse the console's transcript vocabulary */
+.lp-demo-sources {
+  margin-top: 1.25rem;
+}
+.lp-demo .source {
   font-size: 0.88rem;
-  line-height: 1.4;
-  color: var(--ink-2);
-  counter-increment: src;
+  padding: 0.2rem 0.45rem;
+  margin: -0.2rem -0.45rem;
+  border-radius: var(--radius-inner);
+  transition: background-color 140ms var(--ease);
 }
-.lp-demo-src li::before {
-  content: counter(src);
-  flex: none;
-  min-width: 0.9rem;
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: var(--accent-strong);
-  font-variant-numeric: tabular-nums;
+.lp-demo .source[data-hi="true"] {
+  background: var(--accent-soft);
 }
 
 /* ---- footer ---- */
@@ -229,4 +296,176 @@
 }
 .lp-foot-note {
   color: var(--ink-3);
+}
+
+/* ---- short viewports: compress rhythm, never scroll ---- */
+@media (min-width: 58.06rem) and (max-height: 40rem) {
+  .lp-bar {
+    padding-block: 0.75rem;
+  }
+  .lp-left,
+  .lp-demo {
+    padding-block: 1rem;
+  }
+  .lp-lede {
+    margin-top: 1rem;
+  }
+  .lp-ask {
+    margin-top: 1.3rem;
+  }
+  .lp-try {
+    margin-top: 0.85rem;
+  }
+  .lp-foot {
+    padding-block: 1rem;
+  }
+}
+
+/* ---- responsive: single column, rule rotates horizontal ---- */
+@media (max-width: 58rem) {
+  .lp-main {
+    grid-template-columns: 1fr;
+    align-items: start;
+    align-content: start;
+    gap: 0;
+  }
+  .lp-left {
+    padding-block: 2rem 2.5rem;
+  }
+  .lp-demo {
+    align-self: auto;
+    justify-content: flex-start;
+    max-width: 42rem;
+    padding-left: 0;
+    padding-block: 2rem 3rem;
+    border-left: none;
+    border-top: 1px solid var(--rule);
+  }
+}
+
+/* ============================================================
+   ENTRANCE — one quick, quiet sequence. Everything inside the
+   motion guard so reduced-motion users get the finished page.
+   ============================================================ */
+@media (prefers-reduced-motion: no-preference) {
+  .lp-bar {
+    animation: lp-fade 500ms var(--ease-out) both;
+  }
+
+  .lp-h1-line {
+    transform: translateY(115%);
+    animation: lp-line 750ms var(--ease-out) both;
+  }
+  .lp-h1-mask:nth-child(1) .lp-h1-line {
+    animation-delay: 60ms;
+  }
+  .lp-h1-mask:nth-child(2) .lp-h1-line {
+    animation-delay: 140ms;
+  }
+  .lp-h1-mask:nth-child(3) .lp-h1-line {
+    animation-delay: 220ms;
+  }
+
+  .lp-rise {
+    opacity: 0;
+    animation: lp-in 700ms var(--ease-out) var(--d, 0ms) both;
+  }
+
+  .lp-demo {
+    animation: lp-in 700ms var(--ease-out) 500ms both;
+  }
+
+  .lp-foot {
+    animation: lp-fade 700ms var(--ease-out) 650ms both;
+  }
+
+  .lp-caret {
+    animation: lp-blink 950ms steps(2, start) infinite;
+  }
+
+  .lp-cite {
+    opacity: 0;
+    transform: scale(0.55);
+  }
+  .lp-cite.on {
+    animation: lp-pop 280ms var(--ease-out) both;
+  }
+
+  .lp-demo-sources .source {
+    opacity: 0;
+  }
+  .lp-demo-sources[data-in="true"] .source {
+    animation: lp-in 550ms var(--ease-out) both;
+  }
+  .lp-demo-sources[data-in="true"] .source:nth-child(2) {
+    animation-delay: 90ms;
+  }
+
+  .lp-replay {
+    animation: lp-fade 400ms var(--ease-out) both;
+  }
+
+  .glyph-draw circle,
+  .glyph-draw line,
+  .glyph-draw path {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: lp-draw 500ms var(--ease-out) both;
+  }
+  .glyph-draw circle {
+    animation-delay: 60ms;
+  }
+  .glyph-draw line:nth-of-type(1) {
+    animation-delay: 180ms;
+  }
+  .glyph-draw line:nth-of-type(2) {
+    animation-delay: 320ms;
+  }
+  .glyph-draw path {
+    animation-delay: 440ms;
+  }
+}
+
+@keyframes lp-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes lp-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes lp-line {
+  to {
+    transform: translateY(0);
+  }
+}
+@keyframes lp-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.55);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes lp-blink {
+  50% {
+    opacity: 0;
+  }
+}
+@keyframes lp-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
 }

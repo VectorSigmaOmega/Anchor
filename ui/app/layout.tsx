@@ -5,7 +5,7 @@ import "./globals.css";
 
 const sans = Archivo({
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
+  axes: ["wdth"],
   variable: "--font-sans",
   display: "swap",
 });

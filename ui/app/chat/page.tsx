@@ -1,10 +1,17 @@
 "use client";
 
 import { ChatComposer, ChatComposerInput } from "@astryxdesign/core/Chat";
-import { Collapsible } from "@astryxdesign/core/Collapsible";
 import { Theme } from "@astryxdesign/core/theme";
 import { neutralTheme } from "@astryxdesign/theme-neutral/built";
-import { Menu, Plus, RefreshCw, X } from "lucide-react";
+import {
+  ArrowUpRight,
+  ChevronDown,
+  Menu,
+  Plus,
+  RefreshCw,
+  Trash2,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -258,6 +265,29 @@ function sourceLine(citation: CitationRecord): string {
     : citation.doc_title;
 }
 
+function SourceReference({ citation }: { citation: CitationRecord }) {
+  const url = safeSourceUrl(citation.source_url);
+  const body = (
+    <>
+      <span className="source-doc">{citation.doc_title}</span>
+      {citation.section_title ? (
+        <span className="source-sec">, {citation.section_title}</span>
+      ) : null}
+    </>
+  );
+
+  if (!url) {
+    return <span className="source-ref">{body}</span>;
+  }
+
+  return (
+    <a className="source-ref" href={url} target="_blank" rel="noreferrer">
+      {body}
+      <ArrowUpRight size={13} className="source-ext" aria-hidden="true" />
+    </a>
+  );
+}
+
 function AnswerContent({ response }: { response: QueryResponse }) {
   const { citations } = response;
   const count = citations.length;
@@ -272,36 +302,20 @@ function AnswerContent({ response }: { response: QueryResponse }) {
             {count === 1 ? "Source" : "Sources"}
           </div>
           <ol className="sources">
-            {citations.map((citation, index) => {
-              const url = safeSourceUrl(citation.source_url);
-              return (
-                <li key={citation.chunk_id} className="source">
-                  <span className="source-n">{index + 1}</span>
-                  <span className="reg">{citation.regulator}</span>
-                  <span className="source-title">{sourceLine(citation)}</span>
-                  {url ? (
-                    <a
-                      className="link source-open"
-                      href={url}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      open
-                    </a>
-                  ) : null}
-                </li>
-              );
-            })}
+            {citations.map((citation, index) => (
+              <li key={citation.chunk_id} className="source">
+                <span className="source-n">{index + 1}</span>
+                <span className="reg">{citation.regulator}</span>
+                <SourceReference citation={citation} />
+              </li>
+            ))}
           </ol>
 
-          <Collapsible
-            defaultIsOpen={false}
-            trigger={
-              <span className="evidence-toggle">
-                Read the {count === 1 ? "excerpt" : "excerpts"}
-              </span>
-            }
-          >
+          <details className="evidence-block">
+            <summary className="evidence-toggle">
+              Read the {count === 1 ? "excerpt" : "excerpts"}
+              <ChevronDown size={15} className="evidence-chev" aria-hidden="true" />
+            </summary>
             <div className="evidence-list">
               {citations.map((citation, index) => {
                 const url = safeSourceUrl(citation.source_url);
@@ -333,7 +347,7 @@ function AnswerContent({ response }: { response: QueryResponse }) {
                 );
               })}
             </div>
-          </Collapsible>
+          </details>
         </div>
       ) : null}
     </div>
@@ -401,16 +415,23 @@ function PendingContent() {
 function Transcript({
   messages,
   onRetry,
+  stillIds,
 }: {
   messages: ConversationMessage[];
   onRetry: (messageId: string) => void;
+  stillIds: Set<string>;
 }) {
   return (
     <div className="thread">
       {messages.map((message) => {
+        const entrance = stillIds.has(message.id) ? "" : " turn-in";
         if (message.role === "user") {
           return (
-            <div key={message.id} className="turn turn-q">
+            <div
+              key={message.id}
+              data-mid={message.id}
+              className={`turn turn-q${entrance}`}
+            >
               <p className="question">{message.content}</p>
             </div>
           );
@@ -430,7 +451,11 @@ function Transcript({
         }
 
         return (
-          <div key={message.id} className="turn turn-a">
+          <div
+            key={message.id}
+            data-mid={message.id}
+            className={`turn turn-a${entrance}`}
+          >
             {body}
           </div>
         );
@@ -451,6 +476,8 @@ export default function ChatConsole() {
   const stopRequestedRef = useRef(false);
   const didConsumeDeepLink = useRef(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const workRef = useRef<HTMLDivElement | null>(null);
+  const pendingScrollRef = useRef<string | null>(null);
 
   useEffect(() => {
     const restored = readStoredConversations();
@@ -519,13 +546,53 @@ export default function ChatConsole() {
 
   const messages = activeConversation?.messages ?? [];
 
-  // Keep the newest turn in view as the thread grows.
+  // Turns present when a conversation is opened render still; only turns
+  // added afterwards get the entrance animation.
+  const stillIds = useMemo(
+    () =>
+      new Set(
+        conversations
+          .find((conversation) => conversation.id === activeConversationId)
+          ?.messages.map((message) => message.id) ?? [],
+      ),
+    // Snapshot only when the active conversation changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeConversationId],
+  );
+
+  // Opening a conversation resumes at its latest turn.
   useEffect(() => {
     const node = scrollRef.current;
     if (node) {
       node.scrollTop = node.scrollHeight;
     }
-  }, [messages.length, isLoading]);
+  }, [activeConversationId]);
+
+  // A just-asked question scrolls to the top of the reading column so the
+  // answer unfolds below it instead of yanking the view to the bottom.
+  useEffect(() => {
+    const targetId = pendingScrollRef.current;
+    if (!targetId) {
+      return;
+    }
+    pendingScrollRef.current = null;
+    scrollRef.current
+      ?.querySelector(`[data-mid="${targetId}"]`)
+      ?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }, [messages.length]);
+
+  // Land the cursor in the composer when a keyboard is the likely input.
+  useEffect(() => {
+    if (!isHydrated || messages.length > 0) {
+      return;
+    }
+    if (!window.matchMedia("(min-width: 52rem) and (hover: hover)").matches) {
+      return;
+    }
+    workRef.current
+      ?.querySelector<HTMLElement>('[role="textbox"][contenteditable="true"]')
+      ?.focus({ preventScroll: true });
+  }, [isHydrated, messages.length]);
 
   function updateAssistantMessage(
     conversationId: string,
@@ -662,6 +729,7 @@ export default function ChatConsole() {
       ...current.filter((item) => item.id !== conversation.id),
     ]);
     setActiveConversationId(conversation.id);
+    pendingScrollRef.current = userMessage.id;
     setDraft("");
     setComposerError("");
     void requestAnswer(
@@ -740,6 +808,22 @@ export default function ChatConsole() {
     setComposerError("");
   }
 
+  function deleteConversation(conversationId: string) {
+    if (isLoading) {
+      return;
+    }
+    const remaining = conversations.filter(
+      (conversation) => conversation.id !== conversationId,
+    );
+    const next = remaining.length > 0 ? remaining : [createConversation()];
+    setConversations(next);
+    if (conversationId === activeConversationId) {
+      setActiveConversationId(next[0].id);
+      setDraft("");
+      setComposerError("");
+    }
+  }
+
   function updateDraft(value: string) {
     if (value.length > MAX_QUERY_LENGTH) {
       setDraft(value.slice(0, MAX_QUERY_LENGTH));
@@ -785,11 +869,14 @@ export default function ChatConsole() {
           composerError ? { type: "error", message: composerError } : undefined
         }
       />
-      <p className="composer-note">
-        Anchor is an AI system. It answers only from the official corpus.
-        Verify against the cited source.
-      </p>
     </div>
+  );
+
+  const composerNote = (
+    <p className="composer-note">
+      Anchor is an AI system. It answers only from the official corpus. Verify
+      against the cited source.
+    </p>
   );
 
   return (
@@ -828,31 +915,42 @@ export default function ChatConsole() {
             New question
           </button>
 
+          <p className="side-label">Recent</p>
           <nav className="side-list">
             {conversations.map((conversation) => {
-              const count = conversation.messages.filter(
-                (message) => message.role === "user",
-              ).length;
-              const title = count > 0 ? conversation.title : "New question";
+              const hasMessages = conversation.messages.length > 0;
+              const title = hasMessages ? conversation.title : "New question";
               return (
-                <button
+                <div
                   key={conversation.id}
-                  type="button"
                   className="side-item"
                   data-active={conversation.id === activeConversationId}
-                  disabled={
-                    isLoading && conversation.id !== activeConversationId
-                  }
-                  onClick={() => {
-                    selectConversation(conversation.id);
-                    setSidebarOpen(false);
-                  }}
                 >
-                  <span className="side-item-title">{title}</span>
-                  {count > 0 ? (
-                    <span className="side-item-count">{count}</span>
+                  <button
+                    type="button"
+                    className="side-item-select"
+                    disabled={
+                      isLoading && conversation.id !== activeConversationId
+                    }
+                    onClick={() => {
+                      selectConversation(conversation.id);
+                      setSidebarOpen(false);
+                    }}
+                  >
+                    <span className="side-item-title">{title}</span>
+                  </button>
+                  {hasMessages ? (
+                    <button
+                      type="button"
+                      className="side-item-delete"
+                      aria-label={`Delete "${title}"`}
+                      disabled={isLoading}
+                      onClick={() => deleteConversation(conversation.id)}
+                    >
+                      <Trash2 size={14} aria-hidden="true" />
+                    </button>
                   ) : null}
-                </button>
+                </div>
               );
             })}
           </nav>
@@ -868,7 +966,7 @@ export default function ChatConsole() {
           onClick={() => setSidebarOpen(false)}
         />
 
-        <div className="work">
+        <div className="work" ref={workRef}>
           <header className="work-top">
             <button
               type="button"
@@ -915,14 +1013,24 @@ export default function ChatConsole() {
                     </button>
                   ))}
                 </div>
+                {composerNote}
               </div>
             </div>
           ) : (
             <div className="thread-wrap">
               <div className="thread-scroll" ref={scrollRef}>
-                <Transcript messages={messages} onRetry={retryMessage} />
+                <Transcript
+                  messages={messages}
+                  onRetry={retryMessage}
+                  stillIds={stillIds}
+                />
               </div>
-              <div className="dock">{composer}</div>
+              <div className="dock">
+                <div className="dock-inner">
+                  {composer}
+                  {composerNote}
+                </div>
+              </div>
             </div>
           )}
         </div>
