@@ -5,9 +5,9 @@ Anchor is a narrow, production-shaped RAG system over a fixed corpus of official
 ## Scope
 
 - Corpus source of truth: [`corpus/manifest.yaml`](corpus/manifest.yaml)
-- Public surface: `GET /`, `POST /query`, `GET /healthz`
+- Public surface: `GET /`, `POST /query`, `/chat-api/conversations*`, `GET /healthz`
 - Internal endpoints: `GET /readyz`, `GET /metrics`
-- Out of scope: tax law, chat memory, uploads, user accounts, workflow engines, vector DBs other than PostgreSQL + pgvector
+- Out of scope: tax law, uploads, user accounts/login, cross-device identity, workflow engines, vector DBs other than PostgreSQL + pgvector
 
 ## Stack
 

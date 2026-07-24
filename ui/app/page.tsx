@@ -44,7 +44,11 @@ const EXAMPLES = [
 ];
 
 function chatHref(question?: string): string {
-  return question ? `/chat?q=${encodeURIComponent(question)}` : "/chat";
+  const params = new URLSearchParams({ new: "1" });
+  if (question) {
+    params.set("q", question);
+  }
+  return `/chat?${params.toString()}`;
 }
 
 /* The demo replays a real console exchange. Segments stream word by word;

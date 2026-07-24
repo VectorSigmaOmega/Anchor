@@ -48,6 +48,8 @@ class Settings(BaseSettings):
     cors_origin: str = "http://localhost:3000"
     request_timeout_seconds: float = 15.0
     metrics_namespace: str = "anchor"
+    session_cookie_name: str = "anchor_session"
+    session_cookie_max_age_days: int = 400
     corpus_manifest_path: Path = Path("corpus/manifest.yaml")
     raw_corpus_dir: Path = Path("corpus/raw")
 

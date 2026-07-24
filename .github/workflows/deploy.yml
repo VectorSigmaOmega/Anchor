@@ -186,6 +186,16 @@ jobs:
                     proxy_read_timeout 30s;
                 }
 
+                location /chat-api/ {
+                    proxy_pass http://127.0.0.1:8010/chat-api/;
+                    proxy_http_version 1.1;
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_set_header X-Forwarded-For \$remote_addr;
+                    proxy_set_header X-Forwarded-Proto \$scheme;
+                    proxy_read_timeout 30s;
+                }
+
                 location = /healthz {
                     proxy_pass http://127.0.0.1:8010/healthz;
                     proxy_set_header Host \$host;

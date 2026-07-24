@@ -1,5 +1,6 @@
-from datetime import date
+from datetime import date, datetime
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -66,6 +67,47 @@ class QueryResponse(BaseModel):
     citations: list[Citation]
     disclaimer: str
     latency_ms: int
+
+
+class ChatQueryRequest(BaseModel):
+    question: str = Field(min_length=1)
+    user_message_id: UUID | None = None
+    assistant_message_id: UUID | None = None
+
+    @field_validator("question", mode="before")
+    @classmethod
+    def strip_question(cls, value: str) -> str:
+        return value.strip() if isinstance(value, str) else value
+
+
+class ChatMessage(BaseModel):
+    id: UUID
+    role: Literal["user", "assistant"]
+    content: str
+    created_at: datetime = Field(alias="createdAt")
+    status: Literal["complete", "pending", "error", "stopped"]
+    response: QueryResponse | None = None
+    error: str | None = None
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class ChatConversation(BaseModel):
+    id: UUID
+    title: str
+    created_at: datetime = Field(alias="createdAt")
+    updated_at: datetime = Field(alias="updatedAt")
+    messages: list[ChatMessage] = Field(default_factory=list)
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class ChatHistoryResponse(BaseModel):
+    conversations: list[ChatConversation]
+
+
+class ChatQueryResponse(BaseModel):
+    conversation: ChatConversation
 
 
 class HealthResponse(BaseModel):

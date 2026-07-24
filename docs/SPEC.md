@@ -29,7 +29,7 @@ Implementation note:
 
 ### `POST /query`
 
-The request accepts a required `question` and up to six optional recent conversation turns. History is used only to resolve follow-up references and is not stored server-side. Existing one-shot clients may omit `history`.
+The request accepts a required `question` and up to six optional recent conversation turns. This endpoint is stateless and exists for one-shot clients. The browser chat UI uses the cookie-backed chat endpoints below instead.
 
 Request:
 
@@ -54,7 +54,7 @@ Validation rules:
 - `question` is required
 - trimmed length must be between `1` and `MAX_QUERY_CHARS`
 - `history` is optional and may contain up to six `user` or `assistant` turns
-- each history turn is trimmed, capped at 2,000 characters, and is not persisted by the API
+- each history turn is trimmed, capped at 2,000 characters, and is not persisted by `/query`
 
 Success response:
 
@@ -80,6 +80,38 @@ Success response:
   "latency_ms": 1800
 }
 ```
+
+### Anonymous Chat History
+
+The browser chat UI uses an anonymous `anchor_session` cookie. The cookie is opaque, `HttpOnly`, `SameSite=Lax`, and `Secure` in production. PostgreSQL stores only the SHA-256 hash of the cookie value.
+
+Public chat endpoints:
+
+- `GET /chat-api/conversations`
+- `POST /chat-api/conversations`
+- `DELETE /chat-api/conversations/{conversation_id}`
+- `POST /chat-api/conversations/{conversation_id}/query`
+- `POST /chat-api/conversations/{conversation_id}/messages/{assistant_message_id}/retry`
+
+`GET /chat-api/conversations` returns only the conversations for the current anonymous cookie:
+
+```json
+{
+  "conversations": [
+    {
+      "id": "uuid",
+      "title": "Customer due diligence",
+      "createdAt": "2026-07-24T05:00:00Z",
+      "updatedAt": "2026-07-24T05:01:00Z",
+      "messages": []
+    }
+  ]
+}
+```
+
+`POST /chat-api/conversations/{conversation_id}/query` stores the user message, runs the grounded query pipeline using server-derived conversation history, stores the assistant result, and returns the updated conversation.
+
+Landing-page handoffs use `/chat?new=1&q=...`; the chat UI creates a fresh server conversation before submitting the handed-off question.
 
 Refusal response:
 
@@ -434,6 +466,7 @@ Public:
 
 - `GET /`
 - `POST /query`
+- `/chat-api/conversations*`
 - `GET /healthz`
 
 Internal:
@@ -449,5 +482,5 @@ During MVP implementation, do not add:
 - preview models as defaults
 - a dedicated reranker service
 - a workflow engine
-- chat memory
-- user accounts
+- user accounts or login
+- personal memory beyond anonymous chat transcripts

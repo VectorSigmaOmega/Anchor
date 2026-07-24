@@ -62,6 +62,10 @@ type QueryResponse = {
   latency_ms: number;
 };
 
+type ChatQueryResponse = {
+  conversation: Conversation;
+};
+
 type MessageStatus = "complete" | "pending" | "error" | "stopped";
 
 type ConversationMessage = {
@@ -82,15 +86,10 @@ type Conversation = {
   messages: ConversationMessage[];
 };
 
-type ApiHistoryTurn = {
-  role: "user" | "assistant";
-  content: string;
-};
-
 const MAX_QUERY_LENGTH = 800;
 const REQUEST_TIMEOUT_MS = 45_000;
 const MAX_SAVED_CONVERSATIONS = 20;
-const STORAGE_KEY = "anchor.conversations.v1";
+const CHAT_API_BASE = "/chat-api/conversations";
 
 const SUGGESTED_QUESTIONS = [
   {
@@ -119,23 +118,15 @@ const REFUSAL_COPY: Record<NonNullable<QueryResponse["refusal_reason"]>, string>
     "This demo has reached its query limit for your connection. Please try again later.",
 };
 
-function createId(prefix: string): string {
-  const suffix =
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  return `${prefix}-${suffix}`;
-}
-
-function createConversation(): Conversation {
-  const now = new Date().toISOString();
-  return {
-    id: createId("conversation"),
-    title: "New question",
-    createdAt: now,
-    updatedAt: now,
-    messages: [],
-  };
+function createUuid(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (part) => {
+    const value = Math.floor(Math.random() * 16);
+    const digit = part === "x" ? value : (value & 0x3) | 0x8;
+    return digit.toString(16);
+  });
 }
 
 function titleFromQuestion(question: string): string {
@@ -143,23 +134,7 @@ function titleFromQuestion(question: string): string {
   return compact.length > 46 ? `${compact.slice(0, 43).trim()}...` : compact;
 }
 
-function isQueryResponse(value: unknown): value is QueryResponse {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const candidate = value as Partial<QueryResponse>;
-  return (
-    (candidate.status === "answered" || candidate.status === "refused") &&
-    typeof candidate.request_id === "string" &&
-    typeof candidate.answer === "string" &&
-    Array.isArray(candidate.citations) &&
-    typeof candidate.disclaimer === "string" &&
-    typeof candidate.latency_ms === "number"
-  );
-}
-
-function isStoredConversation(value: unknown): value is Conversation {
+function isConversation(value: unknown): value is Conversation {
   if (!value || typeof value !== "object") {
     return false;
   }
@@ -189,28 +164,57 @@ function isStoredConversation(value: unknown): value is Conversation {
   );
 }
 
-function readStoredConversations(): Conversation[] {
-  try {
-    const stored = window.localStorage.getItem(STORAGE_KEY);
-    const parsed: unknown = stored ? JSON.parse(stored) : null;
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
+function isChatQueryResponse(value: unknown): value is ChatQueryResponse {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    "conversation" in value &&
+    isConversation((value as Partial<ChatQueryResponse>).conversation)
+  );
+}
 
-    return parsed.filter(isStoredConversation).map((conversation) => ({
-      ...conversation,
-      messages: conversation.messages.map((message) =>
-        message.status === "pending"
-          ? {
-              ...message,
-              status: "stopped" as const,
-              error: "The response was interrupted when the page closed.",
-            }
-          : message,
-      ),
-    }));
-  } catch {
-    return [];
+async function parseJson(response: Response): Promise<unknown> {
+  return response.json().catch(() => null);
+}
+
+async function loadServerConversations(): Promise<Conversation[]> {
+  const response = await fetch(CHAT_API_BASE, { cache: "no-store" });
+  const payload = await parseJson(response);
+  if (!response.ok) {
+    throw new Error(getResponseError(payload, response.status));
+  }
+  if (
+    !payload ||
+    typeof payload !== "object" ||
+    !Array.isArray((payload as { conversations?: unknown }).conversations)
+  ) {
+    throw new Error("Chat history could not be loaded.");
+  }
+  return (payload as { conversations: unknown[] }).conversations
+    .filter(isConversation)
+    .slice(0, MAX_SAVED_CONVERSATIONS);
+}
+
+async function createServerConversation(): Promise<Conversation> {
+  const response = await fetch(CHAT_API_BASE, { method: "POST" });
+  const payload = await parseJson(response);
+  if (!response.ok) {
+    throw new Error(getResponseError(payload, response.status));
+  }
+  if (!isConversation(payload)) {
+    throw new Error("A new chat could not be created.");
+  }
+  return payload;
+}
+
+async function deleteServerConversation(conversationId: string): Promise<void> {
+  const response = await fetch(
+    `${CHAT_API_BASE}/${encodeURIComponent(conversationId)}`,
+    { method: "DELETE" },
+  );
+  if (!response.ok && response.status !== 404) {
+    const payload = await parseJson(response);
+    throw new Error(getResponseError(payload, response.status));
   }
 }
 
@@ -238,25 +242,6 @@ function safeSourceUrl(sourceUrl: string): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-function toApiHistory(messages: ConversationMessage[]): ApiHistoryTurn[] {
-  return messages
-    .flatMap<ApiHistoryTurn>((message) => {
-      if (message.role === "user" && message.status === "complete") {
-        return [{ role: "user", content: message.content }];
-      }
-      if (
-        message.role === "assistant" &&
-        message.status === "complete" &&
-        message.response?.status === "answered" &&
-        message.response.answer
-      ) {
-        return [{ role: "assistant", content: message.response.answer }];
-      }
-      return [];
-    })
-    .slice(-6);
 }
 
 function sourceLine(citation: CitationRecord): string {
@@ -470,33 +455,76 @@ export default function ChatConsole() {
   const [draft, setDraft] = useState("");
   const [composerError, setComposerError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isHistoryBusy, setIsHistoryBusy] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
+  const [historyError, setHistoryError] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const stopRequestedRef = useRef(false);
-  const didConsumeDeepLink = useRef(false);
+  const pendingHandoffRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const workRef = useRef<HTMLDivElement | null>(null);
   const pendingScrollRef = useRef<string | null>(null);
 
   useEffect(() => {
-    const restored = readStoredConversations();
-    const initialConversations =
-      restored.length > 0 ? restored : [createConversation()];
-    setConversations(initialConversations);
-    setActiveConversationId(initialConversations[0].id);
-    setIsHydrated(true);
-  }, []);
+    let cancelled = false;
 
-  useEffect(() => {
-    if (!isHydrated) {
-      return;
+    async function bootstrap() {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const handoff = params.get("q")?.trim() ?? "";
+        const forceNew = params.get("new") === "1";
+        let initialConversations = await loadServerConversations();
+
+        if (handoff) {
+          window.history.replaceState(null, "", window.location.pathname);
+        }
+
+        if (forceNew) {
+          const conversation = await createServerConversation();
+          initialConversations = [
+            conversation,
+            ...initialConversations.filter((item) => item.id !== conversation.id),
+          ];
+          if (handoff) {
+            pendingHandoffRef.current = handoff;
+          }
+        } else if (initialConversations.length === 0) {
+          initialConversations = [await createServerConversation()];
+          if (handoff) {
+            pendingHandoffRef.current = handoff;
+          }
+        } else if (handoff) {
+          pendingHandoffRef.current = handoff;
+        }
+
+        if (cancelled) {
+          return;
+        }
+        setConversations(initialConversations);
+        setActiveConversationId(initialConversations[0]?.id ?? "");
+        setHistoryError("");
+      } catch (caught) {
+        if (cancelled) {
+          return;
+        }
+        setHistoryError(
+          caught instanceof Error
+            ? caught.message
+            : "Chat history could not be loaded.",
+        );
+      } finally {
+        if (!cancelled) {
+          setIsHydrated(true);
+        }
+      }
     }
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify(conversations.slice(0, MAX_SAVED_CONVERSATIONS)),
-    );
-  }, [conversations, isHydrated]);
+
+    void bootstrap();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Lock the viewport to the console shell (the landing page scrolls freely).
   useEffect(() => {
@@ -520,22 +548,6 @@ export default function ChatConsole() {
     return () => window.removeEventListener("keydown", onKey);
   }, [sidebarOpen]);
 
-  // Accept a question handed off from the landing page (/chat?q=...) and run it
-  // once, then clean the URL so a refresh does not resubmit.
-  useEffect(() => {
-    if (!isHydrated || didConsumeDeepLink.current) {
-      return;
-    }
-    didConsumeDeepLink.current = true;
-    const handoff = new URLSearchParams(window.location.search).get("q");
-    if (handoff && handoff.trim()) {
-      window.history.replaceState(null, "", window.location.pathname);
-      submitMessage(handoff);
-    }
-    // submitMessage is stable enough for a one-shot handoff on hydration.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isHydrated]);
-
   const activeConversation = useMemo(
     () =>
       conversations.find(
@@ -545,6 +557,22 @@ export default function ChatConsole() {
   );
 
   const messages = activeConversation?.messages ?? [];
+
+  // Submit a landing-page handoff after server history has selected the target
+  // conversation. `/chat?new=1&q=...` targets a fresh conversation.
+  useEffect(() => {
+    if (!isHydrated || !activeConversation || isLoading) {
+      return;
+    }
+    const handoff = pendingHandoffRef.current;
+    if (!handoff) {
+      return;
+    }
+    pendingHandoffRef.current = null;
+    submitMessage(handoff);
+    // submitMessage intentionally consumes the captured handoff once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeConversation, isHydrated, isLoading]);
 
   // Turns present when a conversation is opened render still; only turns
   // added afterwards get the entrance animation.
@@ -614,11 +642,19 @@ export default function ChatConsole() {
     );
   }
 
+  function replaceConversation(nextConversation: Conversation) {
+    setConversations((current) => [
+      nextConversation,
+      ...current.filter((conversation) => conversation.id !== nextConversation.id),
+    ]);
+    setActiveConversationId(nextConversation.id);
+  }
+
   async function requestAnswer(
     conversationId: string,
     assistantMessageId: string,
     question: string,
-    priorMessages: ConversationMessage[],
+    userMessageId: string,
   ) {
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -632,33 +668,83 @@ export default function ChatConsole() {
     }, REQUEST_TIMEOUT_MS);
 
     try {
-      const response = await fetch("/query", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          question,
-          history: toApiHistory(priorMessages),
-        }),
-        signal: controller.signal,
-      });
-      const payload: unknown = await response.json().catch(() => null);
+      const response = await fetch(
+        `${CHAT_API_BASE}/${encodeURIComponent(conversationId)}/query`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            question,
+            user_message_id: userMessageId,
+            assistant_message_id: assistantMessageId,
+          }),
+          signal: controller.signal,
+        },
+      );
+      const payload = await parseJson(response);
 
-      if (!isQueryResponse(payload)) {
-        throw new Error(getResponseError(payload, response.status));
+      if (isChatQueryResponse(payload)) {
+        replaceConversation(payload.conversation);
+        return;
       }
 
-      const content =
-        payload.status === "answered"
-          ? payload.answer
-          : payload.refusal_reason
-            ? REFUSAL_COPY[payload.refusal_reason]
-            : "No grounded answer was available.";
+      throw new Error(getResponseError(payload, response.status));
+    } catch (caught) {
+      const wasStopped = stopRequestedRef.current;
+      const message = wasStopped
+        ? "You stopped this response."
+        : didTimeout
+          ? "The query took too long to complete."
+          : caught instanceof Error
+            ? caught.message
+            : "The query could not be completed. Please try again.";
+
       updateAssistantMessage(conversationId, assistantMessageId, {
-        content,
-        response: payload,
-        status: "complete",
-        error: undefined,
+        status: wasStopped ? "stopped" : "error",
+        error: message,
       });
+    } finally {
+      window.clearTimeout(timeoutId);
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
+      setIsLoading(false);
+    }
+  }
+
+  async function requestRetry(
+    conversationId: string,
+    assistantMessageId: string,
+  ) {
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    stopRequestedRef.current = false;
+    setIsLoading(true);
+
+    let didTimeout = false;
+    const timeoutId = window.setTimeout(() => {
+      didTimeout = true;
+      controller.abort();
+    }, REQUEST_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(
+        `${CHAT_API_BASE}/${encodeURIComponent(
+          conversationId,
+        )}/messages/${encodeURIComponent(assistantMessageId)}/retry`,
+        {
+          method: "POST",
+          signal: controller.signal,
+        },
+      );
+      const payload = await parseJson(response);
+
+      if (isChatQueryResponse(payload)) {
+        replaceConversation(payload.conversation);
+        return;
+      }
+
+      throw new Error(getResponseError(payload, response.status));
     } catch (caught) {
       const wasStopped = stopRequestedRef.current;
       const message = wasStopped
@@ -683,7 +769,7 @@ export default function ChatConsole() {
   }
 
   function submitMessage(rawMessage: string) {
-    if (isLoading) {
+    if (isLoading || isHistoryBusy || !isHydrated) {
       return;
     }
 
@@ -697,23 +783,27 @@ export default function ChatConsole() {
       return;
     }
 
-    const conversation = activeConversation ?? createConversation();
+    if (!activeConversation) {
+      setComposerError("Chat history is still loading. Please try again.");
+      return;
+    }
+
+    const conversation = activeConversation;
     const now = new Date().toISOString();
     const userMessage: ConversationMessage = {
-      id: createId("message"),
+      id: createUuid(),
       role: "user",
       content: question,
       createdAt: now,
       status: "complete",
     };
     const assistantMessage: ConversationMessage = {
-      id: createId("message"),
+      id: createUuid(),
       role: "assistant",
       content: "",
       createdAt: now,
       status: "pending",
     };
-    const priorMessages = conversation.messages;
     const updatedConversation: Conversation = {
       ...conversation,
       title:
@@ -721,14 +811,10 @@ export default function ChatConsole() {
           ? titleFromQuestion(question)
           : conversation.title,
       updatedAt: now,
-      messages: [...priorMessages, userMessage, assistantMessage],
+      messages: [...conversation.messages, userMessage, assistantMessage],
     };
 
-    setConversations((current) => [
-      updatedConversation,
-      ...current.filter((item) => item.id !== conversation.id),
-    ]);
-    setActiveConversationId(conversation.id);
+    replaceConversation(updatedConversation);
     pendingScrollRef.current = userMessage.id;
     setDraft("");
     setComposerError("");
@@ -736,30 +822,15 @@ export default function ChatConsole() {
       conversation.id,
       assistantMessage.id,
       question,
-      priorMessages,
+      userMessage.id,
     );
   }
 
   function retryMessage(messageId: string) {
-    if (!activeConversation || isLoading) {
+    if (!activeConversation || isLoading || isHistoryBusy) {
       return;
     }
 
-    const assistantIndex = activeConversation.messages.findIndex(
-      (message) => message.id === messageId,
-    );
-    const userMessage = activeConversation.messages
-      .slice(0, assistantIndex)
-      .reverse()
-      .find((message) => message.role === "user");
-
-    if (!userMessage) {
-      return;
-    }
-
-    const userIndex = activeConversation.messages.findIndex(
-      (message) => message.id === userMessage.id,
-    );
     updateAssistantMessage(activeConversation.id, messageId, {
       content: "",
       response: undefined,
@@ -767,12 +838,7 @@ export default function ChatConsole() {
       error: undefined,
       createdAt: new Date().toISOString(),
     });
-    void requestAnswer(
-      activeConversation.id,
-      messageId,
-      userMessage.content,
-      activeConversation.messages.slice(0, userIndex),
-    );
+    void requestRetry(activeConversation.id, messageId);
   }
 
   function stopResponse() {
@@ -780,27 +846,43 @@ export default function ChatConsole() {
     abortControllerRef.current?.abort();
   }
 
-  function startNewConversation() {
-    if (isLoading) {
+  async function startNewConversation(options: { force?: boolean } = {}) {
+    if (isLoading || isHistoryBusy || !isHydrated) {
       return;
     }
 
-    const existingEmpty = conversations.find(
-      (conversation) => conversation.messages.length === 0,
-    );
+    const existingEmpty = options.force
+      ? undefined
+      : conversations.find((conversation) => conversation.messages.length === 0);
     if (existingEmpty) {
       setActiveConversationId(existingEmpty.id);
-    } else {
-      const conversation = createConversation();
-      setConversations((current) => [conversation, ...current]);
-      setActiveConversationId(conversation.id);
+      setDraft("");
+      setComposerError("");
+      return;
     }
-    setDraft("");
-    setComposerError("");
+
+    setIsHistoryBusy(true);
+    try {
+      const conversation = await createServerConversation();
+      setConversations((current) => [
+        conversation,
+        ...current.filter((item) => item.id !== conversation.id),
+      ]);
+      setActiveConversationId(conversation.id);
+      setDraft("");
+      setComposerError("");
+      setHistoryError("");
+    } catch (caught) {
+      setComposerError(
+        caught instanceof Error ? caught.message : "A new chat could not be created.",
+      );
+    } finally {
+      setIsHistoryBusy(false);
+    }
   }
 
   function selectConversation(conversationId: string) {
-    if (isLoading) {
+    if (isLoading || isHistoryBusy) {
       return;
     }
     setActiveConversationId(conversationId);
@@ -808,19 +890,33 @@ export default function ChatConsole() {
     setComposerError("");
   }
 
-  function deleteConversation(conversationId: string) {
-    if (isLoading) {
+  async function deleteConversation(conversationId: string) {
+    if (isLoading || isHistoryBusy) {
       return;
     }
-    const remaining = conversations.filter(
-      (conversation) => conversation.id !== conversationId,
-    );
-    const next = remaining.length > 0 ? remaining : [createConversation()];
-    setConversations(next);
-    if (conversationId === activeConversationId) {
-      setActiveConversationId(next[0].id);
-      setDraft("");
-      setComposerError("");
+
+    setIsHistoryBusy(true);
+    try {
+      await deleteServerConversation(conversationId);
+      let next = conversations.filter(
+        (conversation) => conversation.id !== conversationId,
+      );
+      if (next.length === 0) {
+        next = [await createServerConversation()];
+      }
+      setConversations(next);
+      if (conversationId === activeConversationId) {
+        setActiveConversationId(next[0]?.id ?? "");
+        setDraft("");
+        setComposerError("");
+      }
+      setHistoryError("");
+    } catch (caught) {
+      setComposerError(
+        caught instanceof Error ? caught.message : "This chat could not be deleted.",
+      );
+    } finally {
+      setIsHistoryBusy(false);
     }
   }
 
@@ -835,6 +931,7 @@ export default function ChatConsole() {
   }
 
   const isEmpty = messages.length === 0;
+  const isBusy = isLoading || isHistoryBusy || !isHydrated;
 
   const composer = (
     <div className="composer">
@@ -854,7 +951,7 @@ export default function ChatConsole() {
           <ChatComposerInput
             label="Message Anchor"
             maxRows={6}
-            isDisabled={isLoading}
+            isDisabled={isBusy}
             pasteAsToken={false}
           />
         }
@@ -906,10 +1003,10 @@ export default function ChatConsole() {
             type="button"
             className="side-new"
             onClick={() => {
-              startNewConversation();
+              void startNewConversation();
               setSidebarOpen(false);
             }}
-            disabled={isLoading}
+            disabled={isBusy}
           >
             <Plus size={16} aria-hidden="true" />
             New question
@@ -929,9 +1026,7 @@ export default function ChatConsole() {
                   <button
                     type="button"
                     className="side-item-select"
-                    disabled={
-                      isLoading && conversation.id !== activeConversationId
-                    }
+                    disabled={isBusy && conversation.id !== activeConversationId}
                     onClick={() => {
                       selectConversation(conversation.id);
                       setSidebarOpen(false);
@@ -944,8 +1039,8 @@ export default function ChatConsole() {
                       type="button"
                       className="side-item-delete"
                       aria-label={`Delete "${title}"`}
-                      disabled={isLoading}
-                      onClick={() => deleteConversation(conversation.id)}
+                      disabled={isBusy}
+                      onClick={() => void deleteConversation(conversation.id)}
                     >
                       <Trash2 size={14} aria-hidden="true" />
                     </button>
@@ -955,7 +1050,7 @@ export default function ChatConsole() {
             })}
           </nav>
 
-          <p className="side-foot">History is kept in this browser only.</p>
+          <p className="side-foot">History is saved to this browser session.</p>
         </aside>
 
         <button
@@ -983,9 +1078,9 @@ export default function ChatConsole() {
             <button
               type="button"
               className="icon-btn"
-              onClick={startNewConversation}
+              onClick={() => void startNewConversation()}
               aria-label="New question"
-              disabled={isLoading}
+              disabled={isBusy}
             >
               <Plus size={18} aria-hidden="true" />
             </button>
@@ -1000,6 +1095,12 @@ export default function ChatConsole() {
                   shows the passages behind each answer, and refuses when the
                   documents do not cover your question.
                 </p>
+                {historyError ? (
+                  <div className="note">
+                    <span className="note-title">History unavailable</span>
+                    <p className="note-body">{historyError}</p>
+                  </div>
+                ) : null}
                 {composer}
                 <div className="hero-chips">
                   {SUGGESTED_QUESTIONS.map((suggestion) => (
@@ -1008,6 +1109,7 @@ export default function ChatConsole() {
                       type="button"
                       className="chip"
                       onClick={() => submitMessage(suggestion.question)}
+                      disabled={isBusy}
                     >
                       {suggestion.label}
                     </button>

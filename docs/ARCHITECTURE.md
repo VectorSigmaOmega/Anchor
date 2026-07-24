@@ -55,7 +55,7 @@ Everything else stays local and simple. This is intentional. Anchor is a product
 
 ### 3.1 anchor-api (FastAPI)
 
-- public endpoints: `POST /query`, `GET /healthz`
+- public endpoints: `POST /query`, `/chat-api/conversations*`, `GET /healthz`
 - internal endpoints: `GET /readyz`, `GET /metrics`
 - in-process query pipeline
 - structured response validation using Pydantic models
@@ -104,6 +104,9 @@ PostgreSQL holds operational data and the search corpus:
 - `chunks`
 - `ingestion_runs`
 - `daily_usage`
+- `chat_sessions`
+- `chat_conversations`
+- `chat_messages`
 
 Indexes:
 
@@ -115,7 +118,7 @@ The database is the single retrieval system for MVP. No separate vector database
 ### 3.5 anchor-ui
 
 - static Next.js export served by nginx
-- one conversational workspace with local history, follow-up context, refusal states, and citations attached to each answer
+- one conversational workspace with anonymous cookie-backed history, follow-up context, refusal states, and citations attached to each answer
 - no client-side API keys
 - no auth flows
 
@@ -171,16 +174,18 @@ Public reviewers do not get live access by default. Sanitized trace snapshots ar
 
 ### 4.2 Query Flow
 
-1. Browser sends `POST /query`
-2. nginx enforces request limits and forwards to FastAPI
-3. FastAPI validates the request and starts a trace
-4. Lexical and dense searches run concurrently
-5. RRF fuses both ranked lists
-6. Cohere reranks the fused candidate set
-7. Top context chunks are selected
-8. `gemini-3.1-flash-lite` generates structured output from only the selected context
-9. Citation validator confirms every citation maps to a provided chunk
-10. Response is returned to the browser
+1. Browser chat UI loads `/chat-api/conversations`, which sets or reuses the anonymous `anchor_session` cookie.
+2. For a saved chat, the browser sends `POST /chat-api/conversations/{conversation_id}/query`.
+3. FastAPI verifies the conversation belongs to the cookie hash, stores the user message, and derives recent history server-side.
+4. Lexical and dense searches run concurrently.
+5. RRF fuses both ranked lists.
+6. Cohere reranks the fused candidate set.
+7. Top context chunks are selected.
+8. `gemini-3.1-flash-lite` generates structured output from only the selected context.
+9. Citation validator confirms every citation maps to a provided chunk.
+10. FastAPI stores the assistant response and returns the updated conversation.
+
+`POST /query` remains available as a stateless one-shot endpoint for non-chat clients.
 
 ## 5. Technology Choices
 
@@ -232,12 +237,13 @@ CI/CD:
 ## 8. Security and Public Surface
 
 - HTTPS only
-- public endpoints limited to `/`, `/query`, and `/healthz`
+- public endpoints limited to `/`, `/query`, `/chat-api/conversations*`, and `/healthz`
 - `/readyz` and `/metrics` are internal-only
 - query length capped
 - rate limiting per IP
 - daily usage cap per IP
 - CORS restricted to the deployed UI origin
+- anonymous chat cookies are opaque, `HttpOnly`, `SameSite=Lax`, `Secure` in production, and stored server-side only as SHA-256 hashes
 - PostgreSQL bound to localhost only
 - secrets never stored in repo
 - public traces are sanitized exports, not live dashboards

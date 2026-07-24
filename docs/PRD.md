@@ -58,8 +58,8 @@ The following are explicitly out of scope:
 
 - tax laws or Income Tax Act content
 - multilingual queries
-- server-side long-term chat memory
-- user accounts or server-synced conversation history
+- user accounts, login, or authenticated cross-device history
+- long-term personal profile memory beyond anonymous chat transcripts
 - document upload by end users
 - self-hosted LLM or embedding inference
 - self-hosted reranker service
@@ -159,6 +159,7 @@ The public deployment shall expose:
 
 - a single-page web UI
 - `POST /query`
+- anonymous cookie-backed chat history endpoints under `/chat-api/conversations`
 - `GET /healthz`
 
 The public deployment shall **not** expose:
@@ -184,7 +185,7 @@ The system shall:
 | NFR1 | Demo URL availability | >=99% monthly |
 | NFR2 | Monthly hosting cost | <= INR 500 |
 | NFR3 | p95 end-to-end latency for a typical query | <= 3.5 s |
-| NFR4 | Public surface area | only the UI, `/query`, and `/healthz` |
+| NFR4 | Public surface area | only the UI, `/query`, `/chat-api/conversations`, and `/healthz` |
 | NFR5 | Secrets storage | no secrets in repo; environment only |
 | NFR6 | Reproducibility | rebuildable from a bare VPS in <=45 minutes |
 | NFR7 | Cold-start ingestion | full corpus indexed in <=20 minutes |
@@ -207,6 +208,7 @@ MVP is complete when all of the following are true:
 - corpus scope is frozen to SEBI plus RBI in `corpus/manifest.yaml`
 - ingestion is idempotent and indexes the allowlisted corpus into PostgreSQL plus pgvector
 - `POST /query` returns a structured answered or refused response
+- chat UI history is scoped by an anonymous secure cookie, without login
 - UI renders clickable citations to source chunks
 - citation validation is enforced server-side
 - rate limiting and daily per-IP limits are active

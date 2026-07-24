@@ -12,8 +12,9 @@ existing exported deployment shape.
   for chat/composer primitives.
 - Custom semantic markup and CSS are allowed for product layout, landing pages,
   and app-specific transcript presentation.
-- Keep client-side history local to the browser. Do not introduce accounts,
-  server-side chat storage, or client-side API keys.
+- Keep chat history scoped to the anonymous `anchor_session` cookie through the
+  `/chat-api/conversations` endpoints. Do not introduce accounts, login flows,
+  cross-device identity, or client-side API keys.
 - Run `npm run lint` and `npm run build` after frontend changes.
 - Visually inspect `/` and `/chat` at mobile, tablet, desktop, and at least one
   intermediate width before calling UI work complete.
