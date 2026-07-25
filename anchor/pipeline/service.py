@@ -45,7 +45,7 @@ def resolve_current_question(question: str, history: Sequence[ConversationTurn])
     )
     if not previous_user_question:
         return question
-    return f"Give a direct answer to the previous user question: {previous_user_question}"
+    return previous_user_question
 
 
 def contextualize_question(question: str, history: Sequence[ConversationTurn]) -> str:

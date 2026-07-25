@@ -197,13 +197,9 @@ def test_contextualize_question_resolves_direct_answer_followup() -> None:
                 content="Master Circular is issued in exercise of powers conferred under which section?",
             )
         ],
-    ) == (
-        "Give a direct answer to the previous user question: "
-        "Master Circular is issued in exercise of powers conferred under which section?"
-    )
+    ) == "Master Circular is issued in exercise of powers conferred under which section?"
     assert question.endswith(
-        "Current question: Give a direct answer to the previous user question: "
-        "Master Circular is issued in exercise of powers conferred under which section?"
+        "Current question: Master Circular is issued in exercise of powers conferred under which section?"
     )
 
 
