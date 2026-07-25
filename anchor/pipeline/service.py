@@ -36,6 +36,18 @@ def is_direct_answer_followup(question: str) -> bool:
     )
 
 
+def resolve_current_question(question: str, history: Sequence[ConversationTurn]) -> str:
+    if not is_direct_answer_followup(question):
+        return question
+    previous_user_question = next(
+        (turn.content for turn in reversed(history) if turn.role == "user"),
+        None,
+    )
+    if not previous_user_question:
+        return question
+    return f"Give a direct answer to the previous user question: {previous_user_question}"
+
+
 def contextualize_question(question: str, history: Sequence[ConversationTurn]) -> str:
     if not history:
         return question
@@ -46,14 +58,7 @@ def contextualize_question(question: str, history: Sequence[ConversationTurn]) -
         compact_content = " ".join(turn.content.split())[:MAX_CONTEXT_TURN_CHARS]
         rendered_turns.append(f"{turn.role.title()}: {compact_content}")
 
-    current_question = question
-    if is_direct_answer_followup(question):
-        previous_user_question = next(
-            (turn.content for turn in reversed(history) if turn.role == "user"),
-            None,
-        )
-        if previous_user_question:
-            current_question = f"Give a direct answer to the previous user question: {previous_user_question}"
+    current_question = resolve_current_question(question, history)
 
     return "\n".join(
         [
@@ -94,7 +99,9 @@ class QueryService:
         request_id = request_id or str(uuid4())
         started = time.perf_counter()
         trace = self.tracer.start_query_trace(request_id=request_id, question=question)
-        contextual_question = contextualize_question(question, history or [])
+        conversation_history = history or []
+        resolved_question = resolve_current_question(question, conversation_history)
+        contextual_question = contextualize_question(question, conversation_history)
         response: QueryResponse | None = None
         reranked: list[RetrievedChunk] = []
         context_chunks: list[RetrievedChunk] = []
@@ -102,12 +109,15 @@ class QueryService:
             request_validation = trace.span("request_validation", input={"question_length": len(question)})
             request_validation.end(output={"valid": True})
             search_questions = [contextual_question]
+            if resolved_question not in search_questions:
+                search_questions.append(resolved_question)
             if contextual_question != question:
                 search_questions.append(question)
             lexical_results, dense_results = await self._search(search_questions, trace)
             fused_chunks = self._fuse(lexical_results, dense_results, trace)
             fused_pool = fused_chunks[: self.settings.rerank_candidate_count]
-            reranked = await self._rerank(contextual_question, fused_pool, trace)
+            rerank_question = resolved_question if resolved_question != question else contextual_question
+            reranked = await self._rerank(rerank_question, fused_pool, trace)
             reranked, hinted_titles = self._apply_document_hints(contextual_question, reranked, trace)
             context_span = trace.span("context_selection", input={"reranked_count": len(reranked)})
             context_chunks = self._select_context(

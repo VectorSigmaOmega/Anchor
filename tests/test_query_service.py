@@ -1,5 +1,10 @@
 from anchor.config import Settings
-from anchor.pipeline.service import QueryService, contextualize_question, is_direct_answer_followup
+from anchor.pipeline.service import (
+    QueryService,
+    contextualize_question,
+    is_direct_answer_followup,
+    resolve_current_question,
+)
 from anchor.schemas import ConversationTurn, ModelCitation, ModelQueryResponse, QueryExecutionResult, RetrievedChunk
 from anchor.services.metrics import Metrics
 from anchor.services.tracing import Tracer
@@ -184,6 +189,18 @@ def test_contextualize_question_resolves_direct_answer_followup() -> None:
     )
 
     assert is_direct_answer_followup("just give the answer")
+    assert resolve_current_question(
+        "just give the answer",
+        [
+            ConversationTurn(
+                role="user",
+                content="Master Circular is issued in exercise of powers conferred under which section?",
+            )
+        ],
+    ) == (
+        "Give a direct answer to the previous user question: "
+        "Master Circular is issued in exercise of powers conferred under which section?"
+    )
     assert question.endswith(
         "Current question: Give a direct answer to the previous user question: "
         "Master Circular is issued in exercise of powers conferred under which section?"
