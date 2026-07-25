@@ -71,6 +71,7 @@ def refusal_reason_for_context(
     )
     if support_count < settings.rerank_min_support_count:
         return "insufficient_support"
-    if not has_direct_support(question, context_chunks):
+    support_question = ambiguity_question or question
+    if not has_direct_support(support_question, context_chunks) and not has_direct_support(question, context_chunks):
         return "insufficient_support"
     return None

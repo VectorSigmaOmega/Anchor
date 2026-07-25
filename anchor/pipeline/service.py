@@ -11,7 +11,7 @@ from anchor.db.repository import AnchorRepository
 from anchor.logging import log_extra
 from anchor.pipeline.citations import validate_and_hydrate_citations
 from anchor.pipeline.refusal import refusal_reason_for_context
-from anchor.pipeline.rrf import fuse_ranked_chunks
+from anchor.pipeline.rrf import fuse_ranked_chunk_lists
 from anchor.providers.gemini import EmbeddingProvider, GenerationProvider, MalformedModelOutputError
 from anchor.providers.rerank import RerankProvider
 from anchor.schemas import ConversationTurn, ModelQueryResponse, QueryExecutionResult, QueryResponse, RetrievedChunk
@@ -80,11 +80,11 @@ class QueryService:
         try:
             request_validation = trace.span("request_validation", input={"question_length": len(question)})
             request_validation.end(output={"valid": True})
-            lexical_chunks, dense_chunks = await asyncio.gather(
-                self._lexical_search(contextual_question, trace),
-                self._dense_search(contextual_question, trace),
-            )
-            fused_chunks = self._fuse(lexical_chunks, dense_chunks, trace)
+            search_questions = [contextual_question]
+            if contextual_question != question:
+                search_questions.append(question)
+            lexical_results, dense_results = await self._search(search_questions, trace)
+            fused_chunks = self._fuse(lexical_results, dense_results, trace)
             fused_pool = fused_chunks[: self.settings.rerank_candidate_count]
             reranked = await self._rerank(contextual_question, fused_pool, trace)
             context_span = trace.span("context_selection", input={"reranked_count": len(reranked)})
@@ -127,10 +127,7 @@ class QueryService:
                             contextual_question,
                             context_chunks,
                             trace,
-                            retry_note=(
-                                "Your previous output was invalid. Use only allowed chunk IDs from the context and "
-                                "return plain text without markdown tables or HTML."
-                            ),
+                            retry_note=self._validation_retry_note(model_response),
                         )
                     except MalformedModelOutputError:
                         hydrated = (False, [])
@@ -189,6 +186,21 @@ class QueryService:
                     }
                 )
 
+    async def _search(
+        self,
+        questions: Sequence[str],
+        trace: NullTrace,
+    ) -> tuple[list[list[RetrievedChunk]], list[list[RetrievedChunk]]]:
+        results = await asyncio.gather(
+            *[self._lexical_search(question, trace) for question in questions],
+            *[self._dense_search(question, trace) for question in questions],
+        )
+        split_at = len(questions)
+        return (
+            list(results[:split_at]),
+            list(results[split_at:]),
+        )
+
     async def _lexical_search(self, question: str, trace: NullTrace) -> list[RetrievedChunk]:
         span = trace.span("lexical_search", input={"question": question})
         chunks = await self.repository.lexical_search(question, self.settings.lexical_candidate_count)
@@ -197,17 +209,24 @@ class QueryService:
 
     def _fuse(
         self,
-        lexical_chunks: list[RetrievedChunk],
-        dense_chunks: list[RetrievedChunk],
+        lexical_results: list[list[RetrievedChunk]],
+        dense_results: list[list[RetrievedChunk]],
         trace: NullTrace,
     ) -> list[RetrievedChunk]:
         span = trace.span(
             "fusion",
-            input={"lexical_count": len(lexical_chunks), "dense_count": len(dense_chunks)},
+            input={
+                "lexical_count": sum(len(chunks) for chunks in lexical_results),
+                "dense_count": sum(len(chunks) for chunks in dense_results),
+                "lexical_queries": len(lexical_results),
+                "dense_queries": len(dense_results),
+            },
         )
-        fused = fuse_ranked_chunks(
-            lexical_chunks,
-            dense_chunks,
+        fused = fuse_ranked_chunk_lists(
+            [
+                *[(chunks, "lexical_score") for chunks in lexical_results],
+                *[(chunks, "dense_score") for chunks in dense_results],
+            ],
             constant=self.settings.rrf_constant,
         )
         span.end(
@@ -351,6 +370,21 @@ class QueryService:
             citations=[],
             disclaimer=DISCLAIMER,
             latency_ms=self._latency_ms(started),
+        )
+
+    @staticmethod
+    def _validation_retry_note(model_response: ModelQueryResponse) -> str:
+        if model_response.status == "refused" and (model_response.answer or model_response.citations):
+            return (
+                "Your previous output was invalid because status='refused' included an answer and/or citations. "
+                "If the supplied context supports any useful limited answer, return status='answered', a plain-text "
+                "answer that explicitly states the limit of what the context supports, and citations using allowed "
+                "chunk IDs only. If the context supports no useful answer, return status='refused' with an empty "
+                "answer, a refusal_reason, and citations=[]."
+            )
+        return (
+            "Your previous output was invalid. Use only allowed chunk IDs from the context, return plain text "
+            "without markdown tables or HTML, and keep refused responses empty with no citations."
         )
 
     @staticmethod

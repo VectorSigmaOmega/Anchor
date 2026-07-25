@@ -260,8 +260,13 @@ class GeminiGenerationProvider:
         retry_note: str | None,
     ) -> dict[str, Any]:
         instructions = (
-            "You answer only from the supplied regulatory context. "
-            "Return JSON only. If the context is insufficient, out of corpus, or ambiguous, refuse. "
+            "You answer the current user question only from the supplied regulatory context. "
+            "Use prior conversation text only to resolve references in the current question. "
+            "Return JSON only. If the context supports a useful limited answer, answer that limited part "
+            "and explicitly state what the context supports. "
+            "Refuse only when the supplied context supports no useful answer, is out of corpus, or remains ambiguous. "
+            "When status is refused, answer must be an empty string, refusal_reason must be set, and citations must be []. "
+            "Never return status refused with answer text or citations. "
             "Answers must be plain text only with no markdown tables or HTML. "
             "Citations must contain chunk_id values from the allowed chunk IDs only."
         )

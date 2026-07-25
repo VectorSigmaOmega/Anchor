@@ -1,4 +1,4 @@
-from anchor.pipeline.rrf import fuse_ranked_chunks
+from anchor.pipeline.rrf import fuse_ranked_chunk_lists, fuse_ranked_chunks
 from anchor.schemas import RetrievedChunk
 
 
@@ -32,3 +32,31 @@ def test_rrf_fuses_and_preserves_scores() -> None:
     assert fused[0].lexical_score == 0.7
     assert fused[0].dense_score == 0.88
 
+
+def test_rrf_fuses_more_than_two_lists_without_duplicate_self_boost() -> None:
+    contextual_lexical = [
+        make_chunk("chunk-a", lexical_score=0.9),
+        make_chunk("chunk-b", lexical_score=0.7),
+        make_chunk("chunk-b", lexical_score=0.7),
+    ]
+    raw_lexical = [
+        make_chunk("chunk-c", lexical_score=0.95),
+        make_chunk("chunk-b", lexical_score=0.6),
+    ]
+    dense = [
+        make_chunk("chunk-c", dense_score=0.88),
+        make_chunk("chunk-a", dense_score=0.82),
+    ]
+
+    fused = fuse_ranked_chunk_lists(
+        [
+            (contextual_lexical, "lexical_score"),
+            (raw_lexical, "lexical_score"),
+            (dense, "dense_score"),
+        ],
+        constant=60,
+    )
+
+    assert [chunk.chunk_id for chunk in fused] == ["chunk-c", "chunk-a", "chunk-b"]
+    assert fused[0].lexical_score == 0.95
+    assert fused[0].dense_score == 0.88
