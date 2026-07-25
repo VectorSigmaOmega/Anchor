@@ -116,8 +116,7 @@ class QueryService:
             lexical_results, dense_results = await self._search(search_questions, trace)
             fused_chunks = self._fuse(lexical_results, dense_results, trace)
             fused_pool = fused_chunks[: self.settings.rerank_candidate_count]
-            rerank_question = resolved_question if resolved_question != question else contextual_question
-            reranked = await self._rerank(rerank_question, fused_pool, trace)
+            reranked = await self._rerank(contextual_question, fused_pool, trace)
             reranked, hinted_titles = self._apply_document_hints(contextual_question, reranked, trace)
             context_span = trace.span("context_selection", input={"reranked_count": len(reranked)})
             context_chunks = self._select_context(
