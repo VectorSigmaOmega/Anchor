@@ -8,6 +8,10 @@ from anchor.config import Settings
 from anchor.schemas import RetrievedChunk
 
 
+def format_rerank_document(chunk: RetrievedChunk) -> str:
+    return chunk.retrieval_text()
+
+
 class RerankProvider(Protocol):
     async def rerank(self, question: str, candidates: list[RetrievedChunk], top_n: int) -> list[RetrievedChunk]:
         ...
@@ -22,7 +26,7 @@ class CohereRerankProvider:
     ) -> list[RetrievedChunk]:
         if not candidates:
             return []
-        documents = [chunk.text for chunk in candidates]
+        documents = [format_rerank_document(chunk) for chunk in candidates]
         async with httpx.AsyncClient(timeout=20.0) as client:
             response = await client.post(
                 "https://api.cohere.com/v2/rerank",

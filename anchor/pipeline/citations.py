@@ -12,6 +12,11 @@ def render_quote(text: str, max_chars: int = 240) -> str:
     return compact[: max_chars - 1].rstrip() + "…"
 
 
+def citation_quote_text(chunk: RetrievedChunk) -> str:
+    section_title = chunk.section_path.split(" > ")[-1]
+    return f"{section_title} {chunk.text}".strip()
+
+
 def is_plain_text_answer(answer: str) -> bool:
     if "<" in answer and ">" in answer:
         return False
@@ -52,7 +57,7 @@ def validate_and_hydrate_citations(
                 section_title=chunk.section_path.split(" > ")[-1],
                 page=chunk.page,
                 source_url=chunk.source_url,
-                quote=render_quote(chunk.text),
+                quote=render_quote(citation_quote_text(chunk)),
             )
         )
         seen.add(item.chunk_id)

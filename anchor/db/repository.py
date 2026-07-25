@@ -163,7 +163,7 @@ class AnchorRepository:
                             text, text_tsv, embedding, content_sha256
                         ) VALUES (
                             %s, %s, %s, %s, %s,
-                            %s, to_tsvector('english', %s), %s::vector, %s
+                            %s, to_tsvector('english', %s || ' ' || %s), %s::vector, %s
                         )
                         """,
                         (
@@ -173,6 +173,7 @@ class AnchorRepository:
                             chunk.section_path,
                             chunk.page,
                             chunk.text,
+                            chunk.section_path,
                             chunk.text,
                             to_pgvector(embedding),
                             chunk.content_sha256,

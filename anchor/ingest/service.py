@@ -49,7 +49,7 @@ class IngestionService:
                 chunks = build_chunks(parsed)
                 if file_sha256(path) != document.sha256:
                     raise ValueError(f"hash mismatch before upsert for {document.doc_id}")
-                texts = [chunk.text for chunk in chunks]
+                texts = [chunk.retrieval_text() for chunk in chunks]
                 embeddings = await self.embedding_provider.embed_documents(texts)
                 await self.repository.upsert_document_chunks(document, chunks, embeddings)
                 docs_changed += 1

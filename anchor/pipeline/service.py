@@ -103,7 +103,13 @@ class QueryService:
                     ],
                 }
             )
-            refusal_reason = refusal_reason_for_context(contextual_question, reranked, context_chunks, self.settings)
+            refusal_reason = refusal_reason_for_context(
+                contextual_question,
+                reranked,
+                context_chunks,
+                self.settings,
+                ambiguity_question=question,
+            )
             if refusal_reason:
                 response = self._refusal_response(request_id, refusal_reason, started)
             else:

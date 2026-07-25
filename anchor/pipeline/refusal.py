@@ -46,16 +46,21 @@ def has_direct_support(question: str, chunks: list[RetrievedChunk]) -> bool:
     if not keywords:
         return True
     for chunk in chunks:
-        words = significant_terms(chunk.text)
+        words = significant_terms(chunk.retrieval_text())
         if len(keywords & words) >= min(2, len(keywords)):
             return True
     return False
 
 
 def refusal_reason_for_context(
-    question: str, reranked_chunks: list[RetrievedChunk], context_chunks: list[RetrievedChunk], settings: Settings
+    question: str,
+    reranked_chunks: list[RetrievedChunk],
+    context_chunks: list[RetrievedChunk],
+    settings: Settings,
+    *,
+    ambiguity_question: str | None = None,
 ) -> str | None:
-    if is_ambiguous_question(question):
+    if is_ambiguous_question(ambiguity_question or question):
         return "ambiguous_question"
     if not reranked_chunks:
         return "not_in_corpus"

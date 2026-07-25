@@ -171,6 +171,9 @@ class RetrievedChunk(BaseModel):
     fused_score: float | None = None
     relevance_score: float | None = None
 
+    def retrieval_text(self) -> str:
+        return f"{self.section_path}\n{self.text}".strip()
+
 
 class EvalRow(BaseModel):
     id: str
