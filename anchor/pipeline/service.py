@@ -87,6 +87,7 @@ class QueryService:
             fused_chunks = self._fuse(lexical_results, dense_results, trace)
             fused_pool = fused_chunks[: self.settings.rerank_candidate_count]
             reranked = await self._rerank(contextual_question, fused_pool, trace)
+            reranked = self._apply_document_hints(contextual_question, reranked, trace)
             context_span = trace.span("context_selection", input={"reranked_count": len(reranked)})
             context_chunks = reranked[: self.settings.final_context_top_k]
             context_span.end(
@@ -305,6 +306,33 @@ class QueryService:
                 }
             )
             return fallback
+
+    def _apply_document_hints(
+        self,
+        question: str,
+        reranked: list[RetrievedChunk],
+        trace: NullTrace,
+    ) -> list[RetrievedChunk]:
+        span = trace.span("document_hint_boost", input={"candidate_count": len(reranked)})
+        normalized_question = " ".join(question.lower().split())
+        hinted_titles = {
+            chunk.doc_title.lower()
+            for chunk in reranked
+            if chunk.doc_title and chunk.doc_title.lower() in normalized_question
+        }
+        if not hinted_titles:
+            span.end(output={"hinted_documents": []})
+            return reranked
+
+        boosted: list[RetrievedChunk] = []
+        for chunk in reranked:
+            copy = chunk.model_copy()
+            if copy.doc_title.lower() in hinted_titles:
+                copy.relevance_score = min(1.0, (copy.relevance_score or 0.0) + 0.05)
+            boosted.append(copy)
+        boosted.sort(key=lambda chunk: (chunk.relevance_score or 0.0), reverse=True)
+        span.end(output={"hinted_documents": sorted(hinted_titles)})
+        return boosted
 
     async def _generate(
         self,

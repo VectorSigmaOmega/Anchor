@@ -258,3 +258,46 @@ def test_query_service_retries_refused_response_with_answer_and_citations() -> N
     assert result.response.status == "answered"
     assert len(generation_provider.retry_notes) == 2
     assert "status='refused' included an answer" in (generation_provider.retry_notes[1] or "")
+
+
+def test_query_service_boosts_documents_named_in_conversation_context() -> None:
+    settings = Settings.model_validate(
+        {
+            "database_url": "postgresql://anchor:anchor@localhost:5432/anchor",
+            "gemini_api_key": "key",
+            "cohere_api_key": "key",
+        }
+    )
+    service = QueryService(
+        settings=settings,
+        repository=FakeRepository(),  # type: ignore[arg-type]
+        embedding_provider=FakeEmbeddingProvider(),
+        generation_provider=FakeGenerationProvider(),
+        rerank_provider=FakeRerankProvider(),
+        tracer=Tracer(settings),
+        metrics=Metrics("anchor_test_document_hint"),
+    )
+    research = research_chunk(
+        "sebi-ra-005",
+        "This Master Circular is issued in exercise of powers conferred under Section 11(1).",
+    )
+    research.relevance_score = 0.93
+    other = RetrievedChunk(
+        chunk_id="sebi-other-001",
+        doc_id="sebi_other",
+        doc_title="Master Circular for Other Intermediaries",
+        regulator="SEBI",
+        section_path="Master Circular for Other Intermediaries",
+        text="This Master Circular is issued in exercise of powers conferred under Section 11(1).",
+        source_url="https://example.com/other",
+        relevance_score=0.96,
+    )
+
+    boosted = service._apply_document_hints(
+        "Prior answer: The Master Circular for Research Analysts is available on the SEBI website.",
+        [other, research],
+        Tracer(settings).start_query_trace(request_id="test", question="test"),
+    )
+
+    assert boosted[0].chunk_id == "sebi-ra-005"
+    assert (boosted[0].relevance_score or 0.0) > (other.relevance_score or 0.0)
