@@ -10,7 +10,7 @@ from anchor.config import Settings
 from anchor.db.repository import AnchorRepository
 from anchor.logging import log_extra
 from anchor.pipeline.citations import validate_and_hydrate_citations
-from anchor.pipeline.refusal import refusal_reason_for_context
+from anchor.pipeline.refusal import has_direct_support, refusal_reason_for_context
 from anchor.pipeline.rrf import fuse_ranked_chunk_lists
 from anchor.providers.gemini import EmbeddingProvider, GenerationProvider, MalformedModelOutputError
 from anchor.providers.rerank import RerankProvider
@@ -87,9 +87,14 @@ class QueryService:
             fused_chunks = self._fuse(lexical_results, dense_results, trace)
             fused_pool = fused_chunks[: self.settings.rerank_candidate_count]
             reranked = await self._rerank(contextual_question, fused_pool, trace)
-            reranked = self._apply_document_hints(contextual_question, reranked, trace)
+            reranked, hinted_titles = self._apply_document_hints(contextual_question, reranked, trace)
             context_span = trace.span("context_selection", input={"reranked_count": len(reranked)})
-            context_chunks = reranked[: self.settings.final_context_top_k]
+            context_chunks = self._select_context(
+                contextual_question,
+                question,
+                reranked,
+                hinted_titles,
+            )
             context_span.end(
                 output={
                     "context_count": len(context_chunks),
@@ -312,7 +317,7 @@ class QueryService:
         question: str,
         reranked: list[RetrievedChunk],
         trace: NullTrace,
-    ) -> list[RetrievedChunk]:
+    ) -> tuple[list[RetrievedChunk], set[str]]:
         span = trace.span("document_hint_boost", input={"candidate_count": len(reranked)})
         normalized_question = " ".join(question.lower().split())
         hinted_titles = {
@@ -322,7 +327,7 @@ class QueryService:
         }
         if not hinted_titles:
             span.end(output={"hinted_documents": []})
-            return reranked
+            return reranked, hinted_titles
 
         boosted: list[RetrievedChunk] = []
         for chunk in reranked:
@@ -332,7 +337,30 @@ class QueryService:
             boosted.append(copy)
         boosted.sort(key=lambda chunk: (chunk.relevance_score or 0.0), reverse=True)
         span.end(output={"hinted_documents": sorted(hinted_titles)})
-        return boosted
+        return boosted, hinted_titles
+
+    def _select_context(
+        self,
+        contextual_question: str,
+        raw_question: str,
+        reranked: list[RetrievedChunk],
+        hinted_titles: set[str],
+    ) -> list[RetrievedChunk]:
+        default_context = reranked[: self.settings.final_context_top_k]
+        if not hinted_titles:
+            return default_context
+
+        hinted_context = [
+            chunk
+            for chunk in reranked
+            if chunk.doc_title.lower() in hinted_titles
+        ][: self.settings.final_context_top_k]
+        if hinted_context and (
+            has_direct_support(raw_question, hinted_context)
+            or has_direct_support(contextual_question, hinted_context)
+        ):
+            return hinted_context
+        return default_context
 
     async def _generate(
         self,

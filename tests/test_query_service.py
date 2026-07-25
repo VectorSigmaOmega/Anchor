@@ -293,11 +293,18 @@ def test_query_service_boosts_documents_named_in_conversation_context() -> None:
         relevance_score=0.96,
     )
 
-    boosted = service._apply_document_hints(
+    boosted, hinted_titles = service._apply_document_hints(
         "Prior answer: The Master Circular for Research Analysts is available on the SEBI website.",
         [other, research],
         Tracer(settings).start_query_trace(request_id="test", question="test"),
     )
+    context = service._select_context(
+        "Prior answer: The Master Circular for Research Analysts is available on the SEBI website.",
+        "Master Circular is issued in exercise of powers conferred under which section?",
+        boosted,
+        hinted_titles,
+    )
 
     assert boosted[0].chunk_id == "sebi-ra-005"
     assert (boosted[0].relevance_score or 0.0) > (other.relevance_score or 0.0)
+    assert [chunk.chunk_id for chunk in context] == ["sebi-ra-005"]
