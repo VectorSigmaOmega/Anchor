@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from collections.abc import Sequence
 from uuid import uuid4
@@ -22,6 +23,17 @@ logger = logging.getLogger(__name__)
 DISCLAIMER = "Demo only. Not legal or financial advice."
 MAX_CONTEXT_TURNS = 4
 MAX_CONTEXT_TURN_CHARS = 800
+DIRECT_ANSWER_RE = re.compile(
+    r"\b(just|only|simply)?\s*(give|tell|provide|answer)\b.*\b(answer|it)\b",
+    re.IGNORECASE,
+)
+
+
+def is_direct_answer_followup(question: str) -> bool:
+    normalized = " ".join(question.lower().split())
+    return normalized in {"just give the answer", "give the answer", "answer it"} or bool(
+        DIRECT_ANSWER_RE.search(question)
+    )
 
 
 def contextualize_question(question: str, history: Sequence[ConversationTurn]) -> str:
@@ -34,12 +46,21 @@ def contextualize_question(question: str, history: Sequence[ConversationTurn]) -
         compact_content = " ".join(turn.content.split())[:MAX_CONTEXT_TURN_CHARS]
         rendered_turns.append(f"{turn.role.title()}: {compact_content}")
 
+    current_question = question
+    if is_direct_answer_followup(question):
+        previous_user_question = next(
+            (turn.content for turn in reversed(history) if turn.role == "user"),
+            None,
+        )
+        if previous_user_question:
+            current_question = f"Give a direct answer to the previous user question: {previous_user_question}"
+
     return "\n".join(
         [
             "Prior conversation (use only to resolve the current question):",
             *rendered_turns,
             "",
-            f"Current question: {question}",
+            f"Current question: {current_question}",
         ]
     )
 

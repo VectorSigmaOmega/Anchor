@@ -1,5 +1,5 @@
 from anchor.config import Settings
-from anchor.pipeline.service import QueryService, contextualize_question
+from anchor.pipeline.service import QueryService, contextualize_question, is_direct_answer_followup
 from anchor.schemas import ConversationTurn, ModelCitation, ModelQueryResponse, QueryExecutionResult, RetrievedChunk
 from anchor.services.metrics import Metrics
 from anchor.services.tracing import Tracer
@@ -166,6 +166,28 @@ def test_contextualize_question_adds_recent_history() -> None:
     assert "User: What customer due diligence steps" in question
     assert "Assistant: The direction requires identification" in question
     assert question.endswith("Current question: What about those steps for NBFCs?")
+
+
+def test_contextualize_question_resolves_direct_answer_followup() -> None:
+    question = contextualize_question(
+        "just give the answer",
+        [
+            ConversationTurn(
+                role="user",
+                content="Master Circular is issued in exercise of powers conferred under which section?",
+            ),
+            ConversationTurn(
+                role="assistant",
+                content="It is issued under Section 11(1).",
+            ),
+        ],
+    )
+
+    assert is_direct_answer_followup("just give the answer")
+    assert question.endswith(
+        "Current question: Give a direct answer to the previous user question: "
+        "Master Circular is issued in exercise of powers conferred under which section?"
+    )
 
 
 def test_query_service_answer_path() -> None:
