@@ -155,6 +155,9 @@ class ChunkRecord(BaseModel):
     text: str
     content_sha256: str
 
+    def retrieval_text(self) -> str:
+        return f"{self.section_path}\n{self.text}".strip()
+
 
 class RetrievedChunk(BaseModel):
     chunk_id: str
