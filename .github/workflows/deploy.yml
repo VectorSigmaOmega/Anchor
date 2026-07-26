@@ -89,9 +89,11 @@ jobs:
             SQL
             sudo -u postgres psql -d anchor -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS vector;"
             sudo install -d -m 0750 -o root -g anchor /etc/anchor
+            sudo install -d -m 0750 -o anchor -g anchor /var/lib/anchor/corpus/raw
             sudo tee /etc/anchor/anchor.env >/dev/null <<ANCHOR_ENV
             DATABASE_URL=postgresql://anchor:$ANCHOR_DB_PASSWORD@localhost:5432/anchor
             ENVIRONMENT=production
+            RAW_CORPUS_DIR=/var/lib/anchor/corpus/raw
             GEMINI_API_KEY=$GEMINI_API_KEY
             GEMINI_API_BASE_URL=https://generativelanguage.googleapis.com/v1beta/models
             GENERATION_MODEL=gemini-3.1-flash-lite
