@@ -1,0 +1,62 @@
+name: codex temporary ssh access
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  install-and-validate:
+    runs-on: ubuntu-latest
+    env:
+      CODEX_PUBLIC_KEY: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKlB48Nna+3M/klql+KTjcSva4sFlbKHSh+t9tWDTZRF codex-photon-migration-20260727
+
+    steps:
+      - name: Install temporary public key
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          envs: CODEX_PUBLIC_KEY
+          script: |
+            set -euo pipefail
+            install -d -m 700 "$HOME/.ssh"
+            touch "$HOME/.ssh/authorized_keys"
+            chmod 600 "$HOME/.ssh/authorized_keys"
+            if grep -qxF "$CODEX_PUBLIC_KEY" "$HOME/.ssh/authorized_keys"; then
+              echo "temporary public key already installed"
+            else
+              printf '%s\n' "$CODEX_PUBLIC_KEY" >> "$HOME/.ssh/authorized_keys"
+              echo "temporary public key installed"
+            fi
+            ssh-keygen -lf "$HOME/.ssh/authorized_keys" | grep -F "codex-photon-migration-20260727"
+
+      - name: Validate temporary key
+        shell: bash
+        env:
+          CODEX_TEMP_PRIVATE_KEY: ${{ secrets.CODEX_PHOTON_MIGRATION_SSH_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$CODEX_TEMP_PRIVATE_KEY" > ~/.ssh/codex_photon_migration_key
+          chmod 600 ~/.ssh/codex_photon_migration_key
+          unset CODEX_TEMP_PRIVATE_KEY
+          for attempt in 1 2 3 4 5; do
+            if ssh-keyscan -T 15 -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 5 ]; then
+              exit 1
+            fi
+            sleep 5
+          done
+          ssh -i ~/.ssh/codex_photon_migration_key \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            "$VPS_USER@$VPS_HOST" \
+            'printf "temporary key validated for %s on %s\n" "$(id -un)" "$(hostname)"'
