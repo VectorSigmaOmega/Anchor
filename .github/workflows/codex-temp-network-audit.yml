@@ -1,0 +1,29 @@
+name: codex temporary network audit
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit-network:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Audit SSH reachability configuration
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            echo "hostname=$(hostname)"
+            echo "public_ip=$(curl -fsS https://api.ipify.org || true)"
+            echo "local_ips=$(hostname -I | xargs)"
+            echo "ssh_listeners:"
+            sudo ss -tlnp | awk 'NR == 1 || /sshd|:22|:2222/'
+            echo "ufw_status:"
+            sudo ufw status numbered || true
+            echo "temporary_iptables_rules:"
+            sudo iptables -S INPUT | grep -F "codex-temp-ssh-20260727" || true
