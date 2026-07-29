@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
-import { Archivo } from "next/font/google";
+import { Inter } from "next/font/google";
 
 import "./globals.css";
 
-const sans = Archivo({
+const sans = Inter({
   subsets: ["latin"],
-  axes: ["wdth"],
   variable: "--font-sans",
   display: "swap",
 });

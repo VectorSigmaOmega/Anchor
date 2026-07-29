@@ -5,15 +5,24 @@ import { Theme } from "@astryxdesign/core/theme";
 import { neutralTheme } from "@astryxdesign/theme-neutral/built";
 import {
   ArrowUpRight,
+  Check,
   ChevronDown,
+  Copy,
   Menu,
+  Moon,
   Plus,
   RefreshCw,
+  Sun,
+  ThumbsDown,
+  ThumbsUp,
   Trash2,
   X,
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+
+type AppearanceMode = "light" | "dark";
+type VoteState = "up" | "down";
 
 function AnchorGlyph({ size = 16 }: { size?: number }) {
   return (
@@ -115,7 +124,7 @@ const REFUSAL_COPY: Record<NonNullable<QueryResponse["refusal_reason"]>, string>
   ambiguous_question:
     "A little more detail is needed before this can be answered from the official corpus.",
   rate_limited:
-    "This demo has reached its query limit for your connection. Please try again later.",
+    "This connection has reached the demo query limit for now.",
 };
 
 function createUuid(): string {
@@ -250,6 +259,67 @@ function sourceLine(citation: CitationRecord): string {
     : citation.doc_title;
 }
 
+function formatLatency(latencyMs?: number): string | null {
+  if (!latencyMs || latencyMs <= 0) {
+    return null;
+  }
+  return `${(latencyMs / 1000).toFixed(1)}s`;
+}
+
+function sourceCountLabel(count: number): string {
+  if (count === 0) {
+    return "no sources";
+  }
+  return count === 1 ? "1 source" : `${count} sources`;
+}
+
+function assistantMeta(message: ConversationMessage): string {
+  if (message.status === "pending") {
+    return "Anchor · searching corpus";
+  }
+  if (message.status === "stopped") {
+    return "Anchor · stopped";
+  }
+  if (message.status === "error") {
+    return "Anchor · failed";
+  }
+
+  const response = message.response;
+  if (!response) {
+    return "Anchor";
+  }
+  const parts = ["Anchor", sourceCountLabel(response.citations.length)];
+  const latency = formatLatency(response.latency_ms);
+  if (latency) {
+    parts.push(latency);
+  }
+  return parts.join(" · ");
+}
+
+function AppearanceToggle({
+  mode,
+  setMode,
+}: {
+  mode: AppearanceMode;
+  setMode: (mode: AppearanceMode) => void;
+}) {
+  const isDark = mode === "dark";
+  return (
+    <button
+      type="button"
+      className="icon-btn"
+      onClick={() => setMode(isDark ? "light" : "dark")}
+      aria-label="Switch appearance"
+    >
+      {isDark ? (
+        <Sun size={16} aria-hidden="true" />
+      ) : (
+        <Moon size={16} aria-hidden="true" />
+      )}
+    </button>
+  );
+}
+
 function SourceReference({ citation }: { citation: CitationRecord }) {
   const url = safeSourceUrl(citation.source_url);
   const body = (
@@ -257,6 +327,9 @@ function SourceReference({ citation }: { citation: CitationRecord }) {
       <span className="source-doc">{citation.doc_title}</span>
       {citation.section_title ? (
         <span className="source-sec">, {citation.section_title}</span>
+      ) : null}
+      {citation.page ? (
+        <span className="source-sec"> · p. {citation.page}</span>
       ) : null}
     </>
   );
@@ -273,6 +346,33 @@ function SourceReference({ citation }: { citation: CitationRecord }) {
   );
 }
 
+function RetrievalSummary({ response }: { response: QueryResponse }) {
+  const cited = response.citations.length;
+  const latency = formatLatency(response.latency_ms);
+
+  if (response.status !== "answered" || cited === 0) {
+    return null;
+  }
+
+  return (
+    <details className="tool-call">
+      <summary>
+        <ChevronDown size={14} className="tool-chev" aria-hidden="true" />
+        <span className="tool-name">retrieve</span>
+        <span className="tool-meta">
+          {cited} cited {cited === 1 ? "passage" : "passages"}
+          {latency ? ` · ${latency}` : ""}
+        </span>
+      </summary>
+      <div className="tool-body">
+        <span>Hybrid retrieval over PostgreSQL and pgvector.</span>
+        <span>Reciprocal rank fusion combines lexical and dense matches.</span>
+        <span>{cited} passages cleared the support threshold and were cited.</span>
+      </div>
+    </details>
+  );
+}
+
 function AnswerContent({ response }: { response: QueryResponse }) {
   const { citations } = response;
   const count = citations.length;
@@ -280,12 +380,10 @@ function AnswerContent({ response }: { response: QueryResponse }) {
   return (
     <div className="answer">
       <p className="answer-text">{response.answer}</p>
+      <RetrievalSummary response={response} />
 
       {count > 0 ? (
         <div className="answer-sources">
-          <div className="sources-label">
-            {count === 1 ? "Source" : "Sources"}
-          </div>
           <ol className="sources">
             {citations.map((citation, index) => (
               <li key={citation.chunk_id} className="source">
@@ -339,6 +437,66 @@ function AnswerContent({ response }: { response: QueryResponse }) {
   );
 }
 
+function MessageActions({
+  message,
+  onCopy,
+  copied,
+  onRetry,
+  vote,
+  onVote,
+}: {
+  message: ConversationMessage;
+  onCopy: (message: ConversationMessage) => void;
+  copied: boolean;
+  onRetry: (messageId: string) => void;
+  vote?: VoteState;
+  onVote: (messageId: string, vote: VoteState) => void;
+}) {
+  return (
+    <div className="message-actions" aria-label="Answer actions">
+      <button
+        type="button"
+        className="action-button"
+        onClick={() => onCopy(message)}
+        aria-label="Copy answer"
+        data-result={copied}
+      >
+        {copied ? (
+          <Check size={15} aria-hidden="true" />
+        ) : (
+          <Copy size={15} aria-hidden="true" />
+        )}
+      </button>
+      <button
+        type="button"
+        className="action-button"
+        onClick={() => onRetry(message.id)}
+        aria-label="Retry"
+      >
+        <RefreshCw size={15} aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        className="action-button"
+        onClick={() => onVote(message.id, "up")}
+        aria-label="Good answer"
+        data-active={vote === "up"}
+      >
+        <ThumbsUp size={15} fill={vote === "up" ? "currentColor" : "none"} aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        className="action-button"
+        onClick={() => onVote(message.id, "down")}
+        aria-label="Bad answer"
+        data-active={vote === "down"}
+      >
+        <ThumbsDown size={15} fill={vote === "down" ? "currentColor" : "none"} aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
 function RefusalContent({ response }: { response: QueryResponse }) {
   const reason = response.refusal_reason;
   const isRateLimited = reason === "rate_limited";
@@ -386,28 +544,31 @@ function FailureContent({
 
 function PendingContent() {
   return (
-    <div className="pending" role="status" aria-label="Searching the corpus">
-      <span>Searching the corpus</span>
-      <span className="pending-dots" aria-hidden="true">
-        <i />
-        <i />
-        <i />
-      </span>
-    </div>
+    <p className="thinking" role="status">
+      Searching the corpus
+    </p>
   );
 }
 
 function Transcript({
   messages,
   onRetry,
+  onCopy,
+  copiedMessageId,
+  votes,
+  onVote,
   stillIds,
 }: {
   messages: ConversationMessage[];
   onRetry: (messageId: string) => void;
+  onCopy: (message: ConversationMessage) => void;
+  copiedMessageId: string;
+  votes: Record<string, VoteState | undefined>;
+  onVote: (messageId: string, vote: VoteState) => void;
   stillIds: Set<string>;
 }) {
   return (
-    <div className="thread">
+    <div className="thread" aria-live="polite">
       {messages.map((message) => {
         const entrance = stillIds.has(message.id) ? "" : " turn-in";
         if (message.role === "user") {
@@ -441,7 +602,18 @@ function Transcript({
             data-mid={message.id}
             className={`turn turn-a${entrance}`}
           >
+            <p className="assistant-meta">{assistantMeta(message)}</p>
             {body}
+            {message.status !== "pending" ? (
+              <MessageActions
+                message={message}
+                onRetry={onRetry}
+                onCopy={onCopy}
+                copied={copiedMessageId === message.id}
+                vote={votes[message.id]}
+                onVote={onVote}
+              />
+            ) : null}
           </div>
         );
       })}
@@ -450,6 +622,7 @@ function Transcript({
 }
 
 export default function ChatConsole() {
+  const [mode, setMode] = useState<AppearanceMode>("light");
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState("");
   const [draft, setDraft] = useState("");
@@ -459,8 +632,11 @@ export default function ChatConsole() {
   const [isHydrated, setIsHydrated] = useState(false);
   const [historyError, setHistoryError] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [copiedMessageId, setCopiedMessageId] = useState("");
+  const [votes, setVotes] = useState<Record<string, VoteState | undefined>>({});
   const abortControllerRef = useRef<AbortController | null>(null);
   const stopRequestedRef = useRef(false);
+  const copyTimerRef = useRef<number | null>(null);
   const pendingHandoffRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const workRef = useRef<HTMLDivElement | null>(null);
@@ -547,6 +723,28 @@ export default function ChatConsole() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [sidebarOpen]);
+
+  useEffect(() => {
+    if (!isLoading) {
+      return;
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        stopRequestedRef.current = true;
+        abortControllerRef.current?.abort();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isLoading]);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) {
+        window.clearTimeout(copyTimerRef.current);
+      }
+    };
+  }, []);
 
   const activeConversation = useMemo(
     () =>
@@ -769,7 +967,19 @@ export default function ChatConsole() {
   }
 
   function submitMessage(rawMessage: string) {
-    if (isLoading || isHistoryBusy || !isHydrated) {
+    if (!isHydrated) {
+      window.setTimeout(() => setDraft(rawMessage), 0);
+      setComposerError("Chat history is still loading.");
+      return;
+    }
+    if (isHistoryBusy) {
+      window.setTimeout(() => setDraft(rawMessage), 0);
+      setComposerError("Chat history is updating.");
+      return;
+    }
+    if (isLoading) {
+      window.setTimeout(() => setDraft(rawMessage), 0);
+      setComposerError("Stop the current response before sending another question.");
       return;
     }
 
@@ -844,6 +1054,30 @@ export default function ChatConsole() {
   function stopResponse() {
     stopRequestedRef.current = true;
     abortControllerRef.current?.abort();
+  }
+
+  function copyMessage(message: ConversationMessage) {
+    const text =
+      message.response?.answer || message.content || message.error || "";
+    if (!text.trim()) {
+      return;
+    }
+    void navigator.clipboard?.writeText(text).catch(() => undefined);
+    setCopiedMessageId(message.id);
+    if (copyTimerRef.current) {
+      window.clearTimeout(copyTimerRef.current);
+    }
+    copyTimerRef.current = window.setTimeout(() => {
+      setCopiedMessageId("");
+      copyTimerRef.current = null;
+    }, 1600);
+  }
+
+  function voteMessage(messageId: string, nextVote: VoteState) {
+    setVotes((current) => ({
+      ...current,
+      [messageId]: current[messageId] === nextVote ? undefined : nextVote,
+    }));
   }
 
   async function startNewConversation(options: { force?: boolean } = {}) {
@@ -932,6 +1166,12 @@ export default function ChatConsole() {
 
   const isEmpty = messages.length === 0;
   const isBusy = isLoading || isHistoryBusy || !isHydrated;
+  const activeTitle = isEmpty
+    ? "New question"
+    : activeConversation?.title || "Conversation";
+  const composerPlaceholder = isEmpty
+    ? "Ask a question about RBI or SEBI regulation"
+    : "Ask a follow-up";
 
   const composer = (
     <div className="composer">
@@ -942,18 +1182,25 @@ export default function ChatConsole() {
         onStop={stopResponse}
         isStopShown={isLoading}
         density="balanced"
-        placeholder={
-          isEmpty
-            ? "Ask a question about RBI or SEBI regulation"
-            : "Ask a follow-up"
-        }
+        placeholder={composerPlaceholder}
         input={
           <ChatComposerInput
+            value={draft}
+            onChange={updateDraft}
+            onSubmit={submitMessage}
+            placeholder={composerPlaceholder}
             label="Message Anchor"
-            maxRows={6}
-            isDisabled={isBusy}
+            maxRows={8}
+            isDisabled={false}
             pasteAsToken={false}
           />
+        }
+        footerActions={
+          <span className="composer-hint">
+            {isEmpty
+              ? "Enter to send · Shift+Enter for a new line"
+              : "Follow-ups keep this conversation's context"}
+          </span>
         }
         headerContext={
           draft.length > MAX_QUERY_LENGTH - 120 ? (
@@ -977,8 +1224,12 @@ export default function ChatConsole() {
   );
 
   return (
-    <Theme theme={neutralTheme} mode="light">
-      <div className="workspace" data-open={sidebarOpen}>
+    <Theme theme={neutralTheme} mode={mode}>
+      <div
+        className="workspace"
+        data-open={sidebarOpen}
+        style={{ colorScheme: mode }}
+      >
         <aside className="side" aria-label="Your questions">
           <div className="side-head">
             <Link
@@ -1050,7 +1301,10 @@ export default function ChatConsole() {
             })}
           </nav>
 
-          <p className="side-foot">History is saved to this browser session.</p>
+          <div className="side-foot">
+            <span>Anonymous session</span>
+            <AppearanceToggle mode={mode} setMode={setMode} />
+          </div>
         </aside>
 
         <button
@@ -1065,35 +1319,25 @@ export default function ChatConsole() {
           <header className="work-top">
             <button
               type="button"
-              className="icon-btn"
+              className="icon-btn menu-toggle"
               onClick={() => setSidebarOpen(true)}
               aria-label="Open questions menu"
             >
               <Menu size={18} aria-hidden="true" />
             </button>
-            <Link href="/" className="wordmark" aria-label="Anchor home">
-              <AnchorGlyph size={15} />
-              Anchor
-            </Link>
-            <button
-              type="button"
-              className="icon-btn"
-              onClick={() => void startNewConversation()}
-              aria-label="New question"
-              disabled={isBusy}
-            >
-              <Plus size={18} aria-hidden="true" />
-            </button>
+            <span className="work-title">{activeTitle}</span>
+            <span className="work-corpus">RBI + SEBI · 16 documents</span>
           </header>
 
           {isEmpty ? (
-            <div className="hero">
+            <>
+            <div className="hero thread-scroll">
               <div className="hero-inner">
-                <h1 className="hero-title">Ask about RBI or SEBI regulation.</h1>
+                <h1 className="hero-title">What do you need from the corpus?</h1>
                 <p className="hero-sub">
-                  Anchor answers only from the official corpus it has indexed,
-                  shows the passages behind each answer, and refuses when the
-                  documents do not cover your question.
+                  Ask about anything inside the indexed RBI Master Directions
+                  and SEBI Master Circulars. Follow-up questions keep the
+                  context of this conversation.
                 </p>
                 {historyError ? (
                   <div className="note">
@@ -1101,29 +1345,39 @@ export default function ChatConsole() {
                     <p className="note-body">{historyError}</p>
                   </div>
                 ) : null}
-                {composer}
-                <div className="hero-chips">
+                <div className="hero-suggestions">
                   {SUGGESTED_QUESTIONS.map((suggestion) => (
                     <button
                       key={suggestion.question}
                       type="button"
-                      className="chip"
+                      className="suggestion-row"
                       onClick={() => submitMessage(suggestion.question)}
                       disabled={isBusy}
                     >
                       {suggestion.label}
+                      <ArrowUpRight size={16} aria-hidden="true" />
                     </button>
                   ))}
                 </div>
+              </div>
+            </div>
+            <div className="dock">
+              <div className="dock-inner">
+                {composer}
                 {composerNote}
               </div>
             </div>
+            </>
           ) : (
-            <div className="thread-wrap">
+            <>
               <div className="thread-scroll" ref={scrollRef}>
                 <Transcript
                   messages={messages}
                   onRetry={retryMessage}
+                  onCopy={copyMessage}
+                  copiedMessageId={copiedMessageId}
+                  votes={votes}
+                  onVote={voteMessage}
                   stillIds={stillIds}
                 />
               </div>
@@ -1133,7 +1387,7 @@ export default function ChatConsole() {
                   {composerNote}
                 </div>
               </div>
-            </div>
+            </>
           )}
         </div>
       </div>
