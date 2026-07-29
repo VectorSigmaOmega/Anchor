@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Manrope } from "next/font/google";
 
 import "./globals.css";
+import { THEME_SCRIPT, ThemeProvider } from "./theme";
 
-const sans = Inter({
+const sans = Manrope({
   subsets: ["latin"],
+  weight: ["400", "500", "600"],
   variable: "--font-sans",
   display: "swap",
 });
@@ -24,13 +26,21 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
+    // `data-theme` and `color-scheme` are deliberately absent here: the script
+    // below owns them. If React rendered `data-theme` it would reset the
+    // script's value back to the prerendered one during hydration.
     <html
       lang="en"
-      data-theme="light"
       data-astryx-theme="neutral"
       className={sans.variable}
+      suppressHydrationWarning
     >
-      <body>{children}</body>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      </head>
+      <body>
+        <ThemeProvider>{children}</ThemeProvider>
+      </body>
     </html>
   );
 }

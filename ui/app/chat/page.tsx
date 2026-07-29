@@ -1,49 +1,32 @@
 "use client";
 
 import { ChatComposer, ChatComposerInput } from "@astryxdesign/core/Chat";
-import { Theme } from "@astryxdesign/core/theme";
-import { neutralTheme } from "@astryxdesign/theme-neutral/built";
-import {
-  ArrowUpRight,
-  Check,
-  ChevronDown,
-  Copy,
-  Menu,
-  Moon,
-  Plus,
-  RefreshCw,
-  Sun,
-  ThumbsDown,
-  ThumbsUp,
-  Trash2,
-  X,
-} from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-type AppearanceMode = "light" | "dark";
-type VoteState = "up" | "down";
+import {
+  CORPUS_SUMMARY,
+  DISCLAIMER,
+  STARTER_QUESTIONS,
+} from "../content";
+import {
+  AnchorMark,
+  ArrowRight,
+  ArrowUpRight,
+  Check,
+  ChevronDown,
+  Close,
+  Copy,
+  Menu,
+  Plus,
+  Retry,
+  ThumbDown,
+  ThumbUp,
+  Trash,
+} from "../icons";
+import { AppearanceToggle } from "../theme";
 
-function AnchorGlyph({ size = 16 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={(size * 18) / 16}
-      viewBox="0 0 24 26"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="12" cy="4" r="2.4" />
-      <line x1="12" y1="6.4" x2="12" y2="22" />
-      <line x1="7" y1="11" x2="17" y2="11" />
-      <path d="M4 15c0 5 3.6 7.6 8 7.6s8-2.6 8-7.6" />
-    </svg>
-  );
-}
+type VoteState = "up" | "down";
 
 type CitationRecord = {
   chunk_id: string;
@@ -99,22 +82,6 @@ const MAX_QUERY_LENGTH = 800;
 const REQUEST_TIMEOUT_MS = 45_000;
 const MAX_SAVED_CONVERSATIONS = 20;
 const CHAT_API_BASE = "/chat-api/conversations";
-
-const SUGGESTED_QUESTIONS = [
-  {
-    label: "Customer due diligence",
-    question:
-      "What customer due diligence steps apply to individual customers?",
-  },
-  {
-    label: "Analyst disclosures",
-    question: "What does SEBI require research analysts to disclose?",
-  },
-  {
-    label: "MSME loan restructuring",
-    question: "When may an MSME loan be restructured under RBI directions?",
-  },
-];
 
 const REFUSAL_COPY: Record<NonNullable<QueryResponse["refusal_reason"]>, string> = {
   not_in_corpus:
@@ -253,12 +220,6 @@ function safeSourceUrl(sourceUrl: string): string | undefined {
   }
 }
 
-function sourceLine(citation: CitationRecord): string {
-  return citation.section_title
-    ? `${citation.doc_title}, ${citation.section_title}`
-    : citation.doc_title;
-}
-
 function formatLatency(latencyMs?: number): string | null {
   if (!latencyMs || latencyMs <= 0) {
     return null;
@@ -296,53 +257,56 @@ function assistantMeta(message: ConversationMessage): string {
   return parts.join(" · ");
 }
 
-function AppearanceToggle({
-  mode,
-  setMode,
-}: {
-  mode: AppearanceMode;
-  setMode: (mode: AppearanceMode) => void;
-}) {
-  const isDark = mode === "dark";
+/**
+ * A source line: the document title links to the official PDF and carries the
+ * accent, while the section and page stay secondary. The locator is not a link,
+ * so the accent marks exactly the thing you can open.
+ */
+function SourceReference({ citation }: { citation: CitationRecord }) {
+  const url = safeSourceUrl(citation.source_url);
+
   return (
-    <button
-      type="button"
-      className="icon-btn"
-      onClick={() => setMode(isDark ? "light" : "dark")}
-      aria-label="Switch appearance"
-    >
-      {isDark ? (
-        <Sun size={16} aria-hidden="true" />
+    <span className="source-ref">
+      {url ? (
+        <a href={url} target="_blank" rel="noreferrer">
+          {citation.doc_title}
+        </a>
       ) : (
-        <Moon size={16} aria-hidden="true" />
+        <span className="source-doc">{citation.doc_title}</span>
       )}
-    </button>
+      {citation.section_title ? `, ${citation.section_title}` : null}
+      {citation.page ? ` · p. ${citation.page}` : null}
+    </span>
   );
 }
 
-function SourceReference({ citation }: { citation: CitationRecord }) {
-  const url = safeSourceUrl(citation.source_url);
-  const body = (
-    <>
-      <span className="source-doc">{citation.doc_title}</span>
-      {citation.section_title ? (
-        <span className="source-sec">, {citation.section_title}</span>
-      ) : null}
-      {citation.page ? (
-        <span className="source-sec"> · p. {citation.page}</span>
-      ) : null}
-    </>
-  );
-
-  if (!url) {
-    return <span className="source-ref">{body}</span>;
+/**
+ * The generator returns prose and a separate citation list; it does not place
+ * markers in the text. When an answer does carry `[n]` markers, render them as
+ * the superscript citation marks the rest of the design uses. Numbers outside
+ * the citation list are left as literal text rather than linked to nothing.
+ */
+function AnswerText({ answer, count }: { answer: string; count: number }) {
+  if (count === 0 || !/\[\d+\]/.test(answer)) {
+    return <p className="answer-text">{answer}</p>;
   }
 
+  const parts = answer.split(/(\[\d+\])/g);
   return (
-    <a className="source-ref" href={url} target="_blank" rel="noreferrer">
-      {body}
-      <ArrowUpRight size={13} className="source-ext" aria-hidden="true" />
-    </a>
+    <p className="answer-text">
+      {parts.map((part, index) => {
+        const marker = /^\[(\d+)\]$/.exec(part);
+        const value = marker ? Number(marker[1]) : 0;
+        if (!marker || value < 1 || value > count) {
+          return part;
+        }
+        return (
+          <sup className="cite" key={index}>
+            {value}
+          </sup>
+        );
+      })}
+    </p>
   );
 }
 
@@ -354,10 +318,15 @@ function RetrievalSummary({ response }: { response: QueryResponse }) {
     return null;
   }
 
+  // Only figures the response actually carries appear here. The prototype showed
+  // a total passage count ("24 passages"); the query API does not report one, and
+  // inventing it would undercut the point of the card.
   return (
     <details className="tool-call">
       <summary>
-        <ChevronDown size={14} className="tool-chev" aria-hidden="true" />
+        <span className="tool-chev">
+          <ChevronDown size={14} />
+        </span>
         <span className="tool-name">retrieve</span>
         <span className="tool-meta">
           {cited} cited {cited === 1 ? "passage" : "passages"}
@@ -365,9 +334,12 @@ function RetrievalSummary({ response }: { response: QueryResponse }) {
         </span>
       </summary>
       <div className="tool-body">
-        <span>Hybrid retrieval over PostgreSQL and pgvector.</span>
-        <span>Reciprocal rank fusion combines lexical and dense matches.</span>
-        <span>{cited} passages cleared the support threshold and were cited.</span>
+        <span>Hybrid retrieval over PostgreSQL and pgvector</span>
+        <span>Reciprocal rank fusion, then Cohere rerank</span>
+        <span>
+          {cited} {cited === 1 ? "passage" : "passages"} above the support
+          threshold, all cited
+        </span>
       </div>
     </details>
   );
@@ -379,7 +351,7 @@ function AnswerContent({ response }: { response: QueryResponse }) {
 
   return (
     <div className="answer">
-      <p className="answer-text">{response.answer}</p>
+      <AnswerText answer={response.answer} count={count} />
       <RetrievalSummary response={response} />
 
       {count > 0 ? (
@@ -396,11 +368,13 @@ function AnswerContent({ response }: { response: QueryResponse }) {
 
           <details className="evidence-block">
             <summary className="evidence-toggle">
+              <span className="evidence-chev">
+                <ChevronDown size={14} />
+              </span>
               Read the {count === 1 ? "excerpt" : "excerpts"}
-              <ChevronDown size={15} className="evidence-chev" aria-hidden="true" />
             </summary>
             <div className="evidence-list">
-              {citations.map((citation, index) => {
+              {citations.map((citation) => {
                 const url = safeSourceUrl(citation.source_url);
                 const location = citation.page
                   ? `Page ${citation.page}`
@@ -408,22 +382,24 @@ function AnswerContent({ response }: { response: QueryResponse }) {
                 return (
                   <figure key={citation.chunk_id} className="evidence">
                     <figcaption className="evidence-meta">
-                      <span className="source-n">{index + 1}</span>
                       <span className="reg">{citation.regulator}</span>
-                      <span className="evidence-loc">{location}</span>
+                      {location}
+                      {citation.section_title
+                        ? ` · ${citation.section_title}`
+                        : null}
                     </figcaption>
-                    <div className="evidence-doc">{sourceLine(citation)}</div>
                     <blockquote className="evidence-quote">
-                      {citation.quote}
+                      &ldquo;{citation.quote}&rdquo;
                     </blockquote>
                     {url ? (
                       <a
-                        className="link"
+                        className="link evidence-link"
                         href={url}
                         target="_blank"
                         rel="noreferrer"
                       >
                         Open official source
+                        <ArrowUpRight size={13} />
                       </a>
                     ) : null}
                   </figure>
@@ -461,11 +437,7 @@ function MessageActions({
         aria-label="Copy answer"
         data-result={copied}
       >
-        {copied ? (
-          <Check size={15} aria-hidden="true" />
-        ) : (
-          <Copy size={15} aria-hidden="true" />
-        )}
+        {copied ? <Check size={15} /> : <Copy size={15} />}
       </button>
       <button
         type="button"
@@ -473,25 +445,27 @@ function MessageActions({
         onClick={() => onRetry(message.id)}
         aria-label="Retry"
       >
-        <RefreshCw size={15} aria-hidden="true" />
+        <Retry size={15} />
       </button>
       <button
         type="button"
         className="action-button"
         onClick={() => onVote(message.id, "up")}
         aria-label="Good answer"
+        aria-pressed={vote === "up"}
         data-active={vote === "up"}
       >
-        <ThumbsUp size={15} fill={vote === "up" ? "currentColor" : "none"} aria-hidden="true" />
+        <ThumbUp size={15} filled={vote === "up"} />
       </button>
       <button
         type="button"
         className="action-button"
         onClick={() => onVote(message.id, "down")}
         aria-label="Bad answer"
+        aria-pressed={vote === "down"}
         data-active={vote === "down"}
       >
-        <ThumbsDown size={15} fill={vote === "down" ? "currentColor" : "none"} aria-hidden="true" />
+        <ThumbDown size={15} filled={vote === "down"} />
       </button>
     </div>
   );
@@ -535,7 +509,7 @@ function FailureContent({
         className="note-retry"
         onClick={() => onRetry(message.id)}
       >
-        <RefreshCw size={14} aria-hidden="true" />
+        <Retry size={14} />
         Try again
       </button>
     </div>
@@ -622,7 +596,6 @@ function Transcript({
 }
 
 export default function ChatConsole() {
-  const [mode, setMode] = useState<AppearanceMode>("light");
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState("");
   const [draft, setDraft] = useState("");
@@ -1216,20 +1189,10 @@ export default function ChatConsole() {
     </div>
   );
 
-  const composerNote = (
-    <p className="composer-note">
-      Anchor is an AI system. It answers only from the official corpus. Verify
-      against the cited source.
-    </p>
-  );
+  const composerNote = <p className="composer-note">{DISCLAIMER}</p>;
 
   return (
-    <Theme theme={neutralTheme} mode={mode}>
-      <div
-        className="workspace"
-        data-open={sidebarOpen}
-        style={{ colorScheme: mode }}
-      >
+    <div className="workspace" data-open={sidebarOpen}>
         <aside className="side" aria-label="Your questions">
           <div className="side-head">
             <Link
@@ -1237,7 +1200,7 @@ export default function ChatConsole() {
               className="wordmark wordmark-link"
               aria-label="Anchor home"
             >
-              <AnchorGlyph size={16} />
+              <AnchorMark size={15} />
               Anchor
             </Link>
             <button
@@ -1246,7 +1209,7 @@ export default function ChatConsole() {
               onClick={() => setSidebarOpen(false)}
               aria-label="Close menu"
             >
-              <X size={18} aria-hidden="true" />
+              <Close size={18} />
             </button>
           </div>
 
@@ -1259,7 +1222,7 @@ export default function ChatConsole() {
             }}
             disabled={isBusy}
           >
-            <Plus size={16} aria-hidden="true" />
+            <Plus size={15} />
             New question
           </button>
 
@@ -1268,16 +1231,17 @@ export default function ChatConsole() {
             {conversations.map((conversation) => {
               const hasMessages = conversation.messages.length > 0;
               const title = hasMessages ? conversation.title : "New question";
+              const isActive = conversation.id === activeConversationId;
               return (
                 <div
                   key={conversation.id}
                   className="side-item"
-                  data-active={conversation.id === activeConversationId}
+                  data-active={isActive}
                 >
                   <button
                     type="button"
                     className="side-item-select"
-                    disabled={isBusy && conversation.id !== activeConversationId}
+                    disabled={isBusy && !isActive}
                     onClick={() => {
                       selectConversation(conversation.id);
                       setSidebarOpen(false);
@@ -1285,7 +1249,9 @@ export default function ChatConsole() {
                   >
                     <span className="side-item-title">{title}</span>
                   </button>
-                  {hasMessages ? (
+                  {/* The delete affordance belongs to the selected row only, so
+                      the list stays a list and not a row of controls. */}
+                  {isActive && hasMessages ? (
                     <button
                       type="button"
                       className="side-item-delete"
@@ -1293,7 +1259,7 @@ export default function ChatConsole() {
                       disabled={isBusy}
                       onClick={() => void deleteConversation(conversation.id)}
                     >
-                      <Trash2 size={14} aria-hidden="true" />
+                      <Trash size={14} />
                     </button>
                   ) : null}
                 </div>
@@ -1303,7 +1269,7 @@ export default function ChatConsole() {
 
           <div className="side-foot">
             <span>Anonymous session</span>
-            <AppearanceToggle mode={mode} setMode={setMode} />
+            <AppearanceToggle />
           </div>
         </aside>
 
@@ -1323,10 +1289,10 @@ export default function ChatConsole() {
               onClick={() => setSidebarOpen(true)}
               aria-label="Open questions menu"
             >
-              <Menu size={18} aria-hidden="true" />
+              <Menu size={18} />
             </button>
             <span className="work-title">{activeTitle}</span>
-            <span className="work-corpus">RBI + SEBI · 16 documents</span>
+            <span className="work-corpus">{CORPUS_SUMMARY}</span>
           </header>
 
           {isEmpty ? (
@@ -1346,16 +1312,16 @@ export default function ChatConsole() {
                   </div>
                 ) : null}
                 <div className="hero-suggestions">
-                  {SUGGESTED_QUESTIONS.map((suggestion) => (
+                  {STARTER_QUESTIONS.map((question) => (
                     <button
-                      key={suggestion.question}
+                      key={question}
                       type="button"
                       className="suggestion-row"
-                      onClick={() => submitMessage(suggestion.question)}
+                      onClick={() => submitMessage(question)}
                       disabled={isBusy}
                     >
-                      {suggestion.label}
-                      <ArrowUpRight size={16} aria-hidden="true" />
+                      {question}
+                      <ArrowRight size={16} />
                     </button>
                   ))}
                 </div>
@@ -1389,8 +1355,7 @@ export default function ChatConsole() {
               </div>
             </>
           )}
-        </div>
       </div>
-    </Theme>
+    </div>
   );
 }
