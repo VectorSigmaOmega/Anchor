@@ -118,12 +118,12 @@ jobs:
             release_src="$(mktemp -d)"
             git clone https://github.com/VectorSigmaOmega/Anchor.git "$release_src"
             git -C "$release_src" checkout "$RELEASE_SHA"
-            sudo mkdir -p "/opt/anchor/releases/$RELEASE_ID"
-            sudo rsync -a --delete --exclude .git "$release_src"/ "/opt/anchor/releases/$RELEASE_ID"/
+            release_dir="/opt/anchor/releases/$RELEASE_ID"
+            sudo mkdir -p "$release_dir"
+            sudo rsync -a --delete --exclude .git "$release_src"/ "$release_dir"/
             rm -rf "$release_src"
-            sudo chown -R "$USER":"$USER" "/opt/anchor/releases/$RELEASE_ID"
-            sudo ln -sfn "/opt/anchor/releases/$RELEASE_ID" /opt/anchor/current
-            cd /opt/anchor/current
+            sudo chown -R "$USER":"$USER" "$release_dir"
+            cd "$release_dir"
             python3 -m venv .venv
             .venv/bin/pip install --upgrade pip
             .venv/bin/pip install .
@@ -132,11 +132,11 @@ jobs:
             npm run build
             sudo mkdir -p /var/www/anchor/ui
             sudo rsync -a --delete out/ /var/www/anchor/ui/
-            cd /opt/anchor/current
-            sudo chown -R anchor:anchor "/opt/anchor/releases/$RELEASE_ID"
-            sudo -u anchor bash -lc "cd /opt/anchor/current && set -a && . /etc/anchor/anchor.env && set +a && .venv/bin/python -m anchor.db.migrate"
+            cd "$release_dir"
+            sudo chown -R anchor:anchor "$release_dir"
+            sudo -u anchor bash -lc "cd '$release_dir' && set -a && . /etc/anchor/anchor.env && set +a && .venv/bin/python -m anchor.db.migrate"
             if [ "$RUN_INGEST" = "true" ]; then
-              sudo -u anchor bash -lc "cd /opt/anchor/current && set -a && . /etc/anchor/anchor.env && set +a && .venv/bin/python -m anchor.ingest.cli"
+              sudo -u anchor bash -lc "cd '$release_dir' && set -a && . /etc/anchor/anchor.env && set +a && .venv/bin/python -m anchor.ingest.cli"
             fi
             sudo install -m 0644 deploy/systemd/anchor-api.service /etc/systemd/system/anchor-api.service
             sudo install -m 0644 deploy/systemd/anchor-ingest.service /etc/systemd/system/anchor-ingest.service
@@ -246,5 +246,8 @@ jobs:
               sudo ln -sfn /etc/nginx/sites-available/anchor /etc/nginx/sites-enabled/anchor
             fi
             sudo nginx -t
+            sudo ln -sfn "$release_dir" /opt/anchor/.current-next
+            sudo mv -Tf /opt/anchor/.current-next /opt/anchor/current
             sudo systemctl restart anchor-api
+            curl -fsS --retry 10 --retry-delay 1 --retry-all-errors http://127.0.0.1:8010/readyz
             sudo nginx -s reload
