@@ -116,15 +116,11 @@ def create_app() -> FastAPI:
                 status_code=422,
                 detail=f"question must be between 1 and {settings.max_query_chars} characters",
             )
-        ip_address = request.headers.get("x-real-ip", "").strip()
-        if not ip_address:
-            ip_address = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
-        if not ip_address:
-            ip_address = request.client.host if request.client else "unknown"
+        ip_address = client_ip(request)
         request_id = request.headers.get("x-request-id") or str(uuid4())
         try:
             await request.app.state.rate_limiter.check(ip_address)
-        except RateLimitExceeded:
+        except RateLimitExceeded as exc:
             result = QueryResponse(
                 request_id=request_id,
                 status="refused",
@@ -146,7 +142,11 @@ def create_app() -> FastAPI:
                     "latency_ms": result.latency_ms,
                 }
             )
-            return JSONResponse(status_code=429, content=result.model_dump(mode="json"))
+            return JSONResponse(
+                status_code=429,
+                content=result.model_dump(mode="json"),
+                headers={"Retry-After": str(exc.retry_after_seconds)},
+            )
         try:
             result = await request.app.state.query_service.execute(
                 question,
@@ -164,7 +164,7 @@ def create_app() -> FastAPI:
                     }
                 },
             )
-            raise HTTPException(status_code=504, detail="upstream provider unavailable") from exc
+            raise HTTPException(status_code=503, detail="The query service is temporarily unavailable. Please try again later.") from exc
         return result.response
 
     @app.get("/chat-api/conversations", response_model=ChatHistoryResponse)
@@ -253,12 +253,9 @@ def create_app() -> FastAPI:
 
 
 def client_ip(request: Request) -> str:
-    ip_address = request.headers.get("x-real-ip", "").strip()
-    if not ip_address:
-        ip_address = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
-    if not ip_address:
-        ip_address = request.client.host if request.client else "unknown"
-    return ip_address
+    # Uvicorn applies forwarded addresses only from trusted proxy peers.
+    # Reading arbitrary request headers here would bypass that trust boundary.
+    return request.client.host if request.client else "unknown"
 
 
 async def ensure_chat_session(request: Request, response: Response) -> str:
@@ -296,11 +293,11 @@ async def execute_persisted_chat_query(
     assistant_message_id: UUID,
     question: str,
     history: list[ConversationTurn],
-) -> ChatQueryResponse:
+) -> ChatQueryResponse | JSONResponse:
     request_id = request.headers.get("x-request-id") or str(uuid4())
     try:
         await request.app.state.rate_limiter.check(client_ip(request))
-    except RateLimitExceeded:
+    except RateLimitExceeded as exc:
         response = QueryResponse(
             request_id=request_id,
             status="refused",
@@ -331,7 +328,11 @@ async def execute_persisted_chat_query(
         conversation = await request.app.state.repository.get_chat_conversation(session_hash, conversation_id)
         if conversation is None:
             raise HTTPException(status_code=404, detail="conversation not found") from None
-        return ChatQueryResponse(conversation=conversation)
+        return JSONResponse(
+            status_code=429,
+            content=ChatQueryResponse(conversation=conversation).model_dump(mode="json", by_alias=True),
+            headers={"Retry-After": str(exc.retry_after_seconds)},
+        )
     try:
         result = await request.app.state.query_service.execute(
             question,
@@ -354,7 +355,7 @@ async def execute_persisted_chat_query(
                 }
             },
         )
-        raise HTTPException(status_code=504, detail="upstream provider unavailable") from exc
+        raise HTTPException(status_code=503, detail="The query service is temporarily unavailable. Please try again later.") from exc
     await request.app.state.repository.complete_chat_assistant_message(
         conversation_id,
         assistant_message_id,

@@ -2,6 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -32,10 +33,10 @@ class Settings(BaseSettings):
     langfuse_host: str = "https://cloud.langfuse.com"
     cohere_api_key: str = ""
     rerank_model: str = "rerank-v4.0-pro"
-    rate_limit_rpm: int = 10
-    rate_limit_rpd: int = 100
+    rate_limit_rpm: int = Field(default=10, gt=0)
+    rate_limit_rpd: int = Field(default=100, gt=0)
     max_query_chars: int = 800
-    max_completion_tokens: int = 1024
+    max_completion_tokens: int = 2048
     rrf_constant: int = 60
     lexical_candidate_count: int = 30
     dense_candidate_count: int = 30
@@ -47,6 +48,7 @@ class Settings(BaseSettings):
     rerank_min_support_count: int = 2
     cors_origin: str = "http://localhost:3000"
     request_timeout_seconds: float = 15.0
+    query_timeout_seconds: float = Field(default=25.0, gt=0)
     metrics_namespace: str = "anchor"
     session_cookie_name: str = "anchor_session"
     session_cookie_max_age_days: int = 400

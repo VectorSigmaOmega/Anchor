@@ -207,6 +207,8 @@ def render_markdown(mode: str, fixture_mode: bool, metrics: dict[str, float]) ->
         [
             "# Anchor Evaluation",
             "",
+            "Source-reviewed live answer checks and model comparison: [Response quality report](RESPONSE_QUALITY.md).",
+            "",
             *current_status,
             "## Latest Run",
             "",

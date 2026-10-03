@@ -41,6 +41,7 @@ server {
     }
 
     location /query {
+        limit_req_status 429;
         limit_req zone=anchor_rpm burst=5 nodelay;
         proxy_pass http://127.0.0.1:8010/query;
         proxy_http_version 1.1;

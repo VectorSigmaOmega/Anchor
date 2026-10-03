@@ -1,5 +1,7 @@
 # Anchor Evaluation
 
+Source-reviewed live answer checks and model comparison: [Response quality report](RESPONSE_QUALITY.md).
+
 ## Current Status
 
 - Verified locally: fixture smoke evaluation path.

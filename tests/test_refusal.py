@@ -1,5 +1,5 @@
 from anchor.config import Settings
-from anchor.pipeline.refusal import is_ambiguous_question, refusal_reason_for_context
+from anchor.pipeline.refusal import is_ambiguous_question, is_out_of_scope_question, refusal_reason_for_context
 from anchor.schemas import RetrievedChunk
 
 
@@ -34,6 +34,12 @@ def chunk(
 def test_ambiguous_question_detection() -> None:
     assert is_ambiguous_question("What does this circular require?")
     assert not is_ambiguous_question("What does the RBI KYC direction require for customer due diligence?")
+
+
+def test_tax_rates_are_out_of_scope_but_regulatory_fee_disclosures_are_supported() -> None:
+    assert is_out_of_scope_question("What is the GST rate on stock brokerage services?")
+    assert is_out_of_scope_question("How do I file an income tax return?")
+    assert not is_out_of_scope_question("Are SEBI research analyst fee limits inclusive of GST?")
 
 
 def test_refusal_threshold_not_in_corpus() -> None:
