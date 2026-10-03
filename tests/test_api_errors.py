@@ -67,6 +67,19 @@ async def test_provider_outages_return_service_errors_and_persist_chat_failure(a
         app.state.repository.complete_chat_assistant_message.assert_not_awaited()
 
 
+@pytest.mark.parametrize("path", ["/chat-api/conversations/{id}/query", "/chat-api/conversations/{id}/messages/{id}/retry"])
+async def test_unexpected_query_errors_do_not_leave_chat_messages_pending(app, path):
+    app.state.query_service.execute.side_effect = PermissionError("TLS bundle unavailable during deployment")
+    path = path.replace("{id}", str(uuid4()))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(path, json={"question": "What is KYC?"})
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == "The query could not be completed. Please try again."
+    app.state.repository.fail_chat_assistant_message.assert_awaited_once()
+    app.state.repository.complete_chat_assistant_message.assert_not_awaited()
+
+
 @pytest.mark.parametrize("path", ["/query", "/chat-api/conversations/{id}/query", "/chat-api/conversations/{id}/messages/{id}/retry"])
 async def test_rate_limits_use_trusted_client_and_return_retry_after(app, path):
     app.state.rate_limiter.check.side_effect = RateLimitExceeded("rate limit exceeded", retry_after_seconds=42)

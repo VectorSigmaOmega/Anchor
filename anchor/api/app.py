@@ -358,6 +358,14 @@ async def execute_persisted_chat_query(
             },
         )
         raise HTTPException(status_code=503, detail="The query service is temporarily unavailable. Please try again later.") from exc
+    except Exception as exc:
+        await request.app.state.repository.fail_chat_assistant_message(
+            conversation_id,
+            assistant_message_id,
+            error="The query could not be completed. Please try again.",
+        )
+        logger.exception("query_service_error", extra={"extra_fields": {"request_id": request_id}})
+        raise HTTPException(status_code=500, detail="The query could not be completed. Please try again.") from exc
     await request.app.state.repository.complete_chat_assistant_message(
         conversation_id,
         assistant_message_id,
