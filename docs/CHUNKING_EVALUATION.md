@@ -202,3 +202,9 @@ a parser change. The existing index remains available until the final swap.
 Fresh artifacts live in ignored `.benchmarks/chunking-v2`, preserving the pilot.
 Set `CHUNKING_ARTIFACT_DIR` when repeating preparation/audit/evaluation, and use
 `python -m scripts.export_rechunk_index` to export the evaluated replacement.
+
+The initial deployment reindex safely rejected the prepared bundle before any
+index mutation: the server installed PyMuPDF 1.28.2, while evaluation used
+1.27.2.3. That newer parser produced four fewer LODR/NCS chunks. Pinning the
+evaluated PyMuPDF version makes source extraction reproducible across deployment
+and evaluation; parser upgrades must rerun the source and focused checks.
