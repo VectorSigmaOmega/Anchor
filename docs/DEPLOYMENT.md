@@ -10,7 +10,8 @@ Build and migrate each release in its own directory, then set ownership before
 atomically promoting `/opt/anchor/current` and restarting the API. Promoting an
 unfinished release can make active requests read inaccessible virtual-environment
 files; this caused a transient HTTP 500 while loading TLS certificates during a
-live deployment check.
+live deployment check. Unexpected query failures are persisted as errors so the
+assistant message remains retryable rather than being left pending.
 
 ## Required External Inputs
 
