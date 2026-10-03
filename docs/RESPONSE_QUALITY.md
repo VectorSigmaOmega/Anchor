@@ -95,6 +95,11 @@ returns a nonzero exit status. `--only` selects case IDs; `--contexts` replays
 previously saved passages for a generation-only comparison, which does not test
 retrieval or application refusal guards.
 
+The weekly evaluation workflow also runs these reviewed checks after ingestion and
+uploads the report. The larger seed evaluation uses the same default pause for
+live calls; fixture smoke checks run without delays. With a production Cohere key,
+`--pause 0` can disable this pacing.
+
 ## Limits of this evidence
 
 This is a small regression set covering four document families, not exhaustive
