@@ -7,7 +7,7 @@ import pytest
 from anchor.config import Settings
 from anchor.providers import gemini
 from anchor.providers.gemini import GeminiAPIClient, GeminiEmbeddingProvider, GeminiGenerationProvider, ProviderError
-from anchor.schemas import RetrievedChunk
+from anchor.schemas import ConversationTurn, RetrievedChunk
 
 
 def settings() -> Settings:
@@ -85,7 +85,8 @@ def test_embedding_provider_uses_retrieval_config() -> None:
 
     assert len(vector) == 768
     _, payload = provider.client.calls[0]  # type: ignore[attr-defined]
-    assert payload["embedContentConfig"]["taskType"] == "RETRIEVAL_QUERY"
+    assert "taskType" not in payload["embedContentConfig"]
+    assert payload["content"]["parts"][0]["text"] == "task: question answering | query: What is KYC?"
     assert payload["embedContentConfig"]["outputDimensionality"] == 768
 
 
@@ -110,7 +111,7 @@ def test_embedding_provider_batches_document_embeddings() -> None:
     assert path == "gemini-embedding-2:batchEmbedContents"
     assert len(payload["requests"]) == 2
     assert payload["requests"][0]["model"] == "models/gemini-embedding-2"
-    assert payload["requests"][0]["embedContentConfig"]["taskType"] == "RETRIEVAL_DOCUMENT"
+    assert "taskType" not in payload["requests"][0]["embedContentConfig"]
     assert payload["requests"][0]["embedContentConfig"]["outputDimensionality"] == 768
     assert provider.last_usage_metadata["promptTokenCount"] == 10
 
@@ -168,12 +169,32 @@ def test_api_client_wraps_invalid_json(monkeypatch: pytest.MonkeyPatch) -> None:
         asyncio.run(client.post("gemini-3.1-flash-lite:generateContent", {}))
 
 
+@pytest.mark.parametrize("response_text", ['{}', '{"question": 123}', 'not JSON'])
+def test_invalid_question_rewrite_fails_without_searching_for_invented_text(response_text: str) -> None:
+    provider = GeminiGenerationProvider(settings())
+    provider.client = FakeGeminiClient({
+        "candidates": [{"content": {"parts": [{"text": response_text}]}}],
+    })  # type: ignore[assignment]
+
+    with pytest.raises(ProviderError, match="invalid question rewrite"):
+        asyncio.run(provider.rewrite_question("What about those?", [ConversationTurn(role="user", content="KYC updates")]))
+
+
+def test_unresolved_question_rewrite_remains_empty() -> None:
+    provider = GeminiGenerationProvider(settings())
+    provider.client = FakeGeminiClient({
+        "candidates": [{"content": {"parts": [{"text": '{"question": ""}'}]}}],
+    })  # type: ignore[assignment]
+
+    assert asyncio.run(provider.rewrite_question("What does that require?", [])) == ""
+
+
 def test_generation_provider_parses_structured_output_and_records_usage() -> None:
     response_text = json.dumps(
         {
             "status": "answered",
             "answer": "Supported answer.",
-            "citations": [{"chunk_id": "chunk-001"}],
+            "citations": [{"chunk_id": "chunk-001", "quote": "KYC text"}],
         }
     )
     provider = GeminiGenerationProvider(settings())
@@ -206,7 +227,7 @@ def test_generation_provider_parses_structured_output_and_records_usage() -> Non
     path, payload = provider.client.calls[0]  # type: ignore[attr-defined]
     assert "systemInstruction" in payload
     assert path == "gemini-3.1-flash-lite:generateContent"
-    assert payload["generationConfig"]["maxOutputTokens"] == 1024
+    assert payload["generationConfig"]["maxOutputTokens"] == 2048
     assert payload["generationConfig"]["thinkingConfig"] == {"thinkingLevel": "minimal"}
     assert payload["generationConfig"]["responseMimeType"] == "application/json"
     assert "responseJsonSchema" in payload["generationConfig"]

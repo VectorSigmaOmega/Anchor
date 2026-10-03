@@ -11,9 +11,9 @@ from anchor.config import Settings
 from anchor.db.repository import AnchorRepository
 from anchor.logging import log_extra
 from anchor.pipeline.citations import validate_and_hydrate_citations
-from anchor.pipeline.refusal import has_direct_support, refusal_reason_for_context
+from anchor.pipeline.refusal import has_direct_support, is_ambiguous_question, is_out_of_scope_question, refusal_reason_for_context
 from anchor.pipeline.rrf import fuse_ranked_chunk_lists
-from anchor.providers.gemini import EmbeddingProvider, GenerationProvider, MalformedModelOutputError
+from anchor.providers.gemini import EmbeddingProvider, GenerationProvider, MalformedModelOutputError, ProviderError
 from anchor.providers.rerank import RerankProvider
 from anchor.schemas import ConversationTurn, ModelQueryResponse, QueryExecutionResult, QueryResponse, RetrievedChunk
 from anchor.services.metrics import Metrics
@@ -27,6 +27,11 @@ DIRECT_ANSWER_RE = re.compile(
     r"\b(just|only|simply)?\s*(give|tell|provide|answer)\b.*\b(answer|it)\b",
     re.IGNORECASE,
 )
+FOLLOWUP_RE = re.compile(r"\b(this|that|these|those|it|they|their|same)\b|^(what|how) about\b", re.IGNORECASE)
+
+
+def needs_question_rewrite(question: str) -> bool:
+    return bool(FOLLOWUP_RE.search(question)) or len(question.split()) <= 5
 
 
 def is_direct_answer_followup(question: str) -> bool:
@@ -96,6 +101,18 @@ class QueryService:
         request_id: str | None = None,
         history: Sequence[ConversationTurn] | None = None,
     ) -> QueryExecutionResult:
+        try:
+            async with asyncio.timeout(self.settings.query_timeout_seconds):
+                return await self._execute(question, request_id=request_id, history=history)
+        except TimeoutError as exc:
+            raise ProviderError("Query exceeded its time budget", provider="pipeline") from exc
+
+    async def _execute(
+        self,
+        question: str,
+        request_id: str | None = None,
+        history: Sequence[ConversationTurn] | None = None,
+    ) -> QueryExecutionResult:
         request_id = request_id or str(uuid4())
         started = time.perf_counter()
         trace = self.tracer.start_query_trace(request_id=request_id, question=question)
@@ -105,18 +122,37 @@ class QueryService:
         response: QueryResponse | None = None
         reranked: list[RetrievedChunk] = []
         context_chunks: list[RetrievedChunk] = []
+        was_rewritten = False
         try:
             request_validation = trace.span("request_validation", input={"question_length": len(question)})
             request_validation.end(output={"valid": True})
-            search_questions = [contextual_question]
+            rewrite = getattr(self.generation_provider, "rewrite_question", None)
+            if conversation_history and resolved_question == question and needs_question_rewrite(question) and callable(rewrite):
+                rewrite_span = trace.span("question_rewrite", input={"question": question})
+                rewritten = await rewrite(question, conversation_history)
+                rewrite_span.end(output={"question": rewritten, "resolved": bool(rewritten)})
+                if rewritten:
+                    was_rewritten = True
+                    resolved_question = rewritten
+                    contextual_question = contextualize_question(rewritten, conversation_history)
+            early_refusal = None
+            if is_out_of_scope_question(resolved_question):
+                early_refusal = "not_in_corpus"
+            elif is_ambiguous_question(resolved_question):
+                early_refusal = "ambiguous_question"
+            if early_refusal:
+                response = self._refusal_response(request_id, early_refusal, started)
+                self.metrics.record_response(response)
+                return QueryExecutionResult(response=response)
+            search_questions = [resolved_question] if was_rewritten else [contextual_question]
             if resolved_question not in search_questions:
                 search_questions.append(resolved_question)
-            if contextual_question != question:
+            if contextual_question != question and not was_rewritten:
                 search_questions.append(question)
             lexical_results, dense_results = await self._search(search_questions, trace)
             fused_chunks = self._fuse(lexical_results, dense_results, trace)
             fused_pool = fused_chunks[: self.settings.rerank_candidate_count]
-            reranked = await self._rerank(contextual_question, fused_pool, trace)
+            reranked = await self._rerank(resolved_question if was_rewritten else contextual_question, fused_pool, trace)
             reranked, hinted_titles = self._apply_document_hints(contextual_question, reranked, trace)
             context_span = trace.span("context_selection", input={"reranked_count": len(reranked)})
             context_chunks = self._select_context(
@@ -144,7 +180,7 @@ class QueryService:
                 reranked,
                 context_chunks,
                 self.settings,
-                ambiguity_question=question,
+                ambiguity_question=resolved_question,
             )
             if refusal_reason:
                 response = self._refusal_response(request_id, refusal_reason, started)
@@ -221,6 +257,9 @@ class QueryService:
                         "latency_ms": response.latency_ms,
                     }
                 )
+            else:
+                self.metrics.requests_total.labels(status="error").inc()
+                trace.end(output={"status": "error", "latency_ms": self._latency_ms(started)})
 
     async def _search(
         self,
@@ -293,8 +332,8 @@ class QueryService:
             )
             return chunks
         except Exception as exc:
-            span.end(output={"fallback": "lexical_only", "error": str(exc)})
-            return []
+            span.end(output={"error": str(exc)})
+            raise
 
     async def _rerank(
         self, question: str, fused_pool: list[RetrievedChunk], trace: NullTrace
@@ -321,26 +360,8 @@ class QueryService:
             )
             return reranked
         except Exception as exc:
-            fallback = [chunk.model_copy() for chunk in fused_pool[: self.settings.rerank_top_k]]
-            top_score = max((chunk.fused_score or 0.0) for chunk in fallback) or 1.0
-            for rank, chunk in enumerate(fallback, start=1):
-                normalized = (chunk.fused_score or 0.0) / top_score
-                chunk.relevance_score = max(normalized, max(0.0, 1.0 - ((rank - 1) * 0.1)))
-            span.end(
-                output={
-                    "fallback": "pre_rerank_order",
-                    "error": str(exc),
-                    "top_chunks": [
-                        {
-                            "chunk_id": chunk.chunk_id,
-                            "doc_id": chunk.doc_id,
-                            "relevance_score": chunk.relevance_score,
-                        }
-                        for chunk in fallback[: self.settings.final_context_top_k]
-                    ],
-                }
-            )
-            return fallback
+            span.end(output={"error": str(exc)})
+            raise
 
     def _apply_document_hints(
         self,
@@ -470,7 +491,10 @@ class QueryService:
             )
         return (
             "Your previous output was invalid. Use only allowed chunk IDs from the context, return plain text "
-            "without markdown tables or HTML, and keep refused responses empty with no citations."
+            "without markdown tables or HTML, and keep refused responses empty with no citations. "
+            "Each citation must include a verbatim contiguous quote copied exactly from its chunk. "
+            "Use at most four unique chunks; inline [n] markers must refer to the returned citation order. "
+            "For an answered response, omit refusal_reason."
         )
 
     @staticmethod

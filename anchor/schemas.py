@@ -27,6 +27,7 @@ class QueryRequest(BaseModel):
 
 class ModelCitation(BaseModel):
     chunk_id: str
+    quote: str = Field(min_length=1, max_length=1600)
 
 
 class ModelQueryResponse(BaseModel):

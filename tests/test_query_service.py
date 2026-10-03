@@ -1,3 +1,7 @@
+import asyncio
+
+import pytest
+
 from anchor.config import Settings
 from anchor.pipeline.service import (
     QueryService,
@@ -5,6 +9,7 @@ from anchor.pipeline.service import (
     is_direct_answer_followup,
     resolve_current_question,
 )
+from anchor.providers.gemini import ProviderError
 from anchor.schemas import ConversationTurn, ModelCitation, ModelQueryResponse, QueryExecutionResult, RetrievedChunk
 from anchor.services.metrics import Metrics
 from anchor.services.tracing import Tracer
@@ -105,9 +110,9 @@ class FakeGenerationProvider:
     ) -> ModelQueryResponse:
         return ModelQueryResponse(
             status="answered",
-            answer="The RBI KYC direction requires customer due diligence before opening accounts.",
+            answer=context_chunks[0].text,
             refusal_reason=None,
-            citations=[ModelCitation(chunk_id=context_chunks[0].chunk_id)],
+            citations=[ModelCitation(chunk_id=context_chunks[0].chunk_id, quote=context_chunks[0].text)],
         )
 
 
@@ -128,13 +133,13 @@ class RefusedThenAnsweredGenerationProvider:
                 status="refused",
                 answer="The provided context says research analysts must bring the Investor Charter to clients' notice.",
                 refusal_reason="insufficient_support",
-                citations=[ModelCitation(chunk_id=context_chunks[0].chunk_id)],
+                citations=[ModelCitation(chunk_id=context_chunks[0].chunk_id, quote=context_chunks[0].text)],
             )
         return ModelQueryResponse(
             status="answered",
             answer="The provided context says research analysts must bring the Investor Charter to clients' notice.",
             refusal_reason=None,
-            citations=[ModelCitation(chunk_id=context_chunks[0].chunk_id)],
+            citations=[ModelCitation(chunk_id=context_chunks[0].chunk_id, quote=context_chunks[0].text)],
         )
 
 
@@ -151,6 +156,130 @@ class FakeRerankProvider:
             copy.relevance_score = 0.9 if index == 1 else 0.5
             reranked.append(copy)
         return reranked
+
+
+@pytest.mark.parametrize("stage", ["embedding", "rerank"])
+async def test_provider_outage_is_not_reported_as_a_corpus_refusal(stage: str) -> None:
+    from unittest.mock import AsyncMock
+
+    settings = Settings(database_url="postgresql://unused")
+    embedding = FakeEmbeddingProvider()
+    rerank = FakeRerankProvider()
+    generation = FakeGenerationProvider()
+    generation.generate = AsyncMock()  # type: ignore[method-assign]
+    error = ProviderError("credits depleted", provider=stage, status_code=402)
+    if stage == "embedding":
+        embedding.embed_query = AsyncMock(side_effect=error)  # type: ignore[method-assign]
+    else:
+        rerank.rerank = AsyncMock(side_effect=error)  # type: ignore[method-assign]
+    service = QueryService(
+        settings=settings,
+        repository=FakeRepository(),  # type: ignore[arg-type]
+        embedding_provider=embedding,
+        generation_provider=generation,
+        rerank_provider=rerank,
+        tracer=Tracer(settings),
+        metrics=Metrics("anchor_outage_test"),
+    )
+
+    with pytest.raises(ProviderError) as caught:
+        await service.execute("What does the RBI KYC direction require?")
+
+    assert caught.value is error
+    generation.generate.assert_not_awaited()
+    assert service.metrics.requests_total.labels(status="error")._value.get() == 1
+    assert service.metrics.refusals_total.labels(reason="not_in_corpus")._value.get() == 0
+
+
+async def test_query_timeout_cancels_provider_work() -> None:
+    from unittest.mock import AsyncMock
+
+    cancelled = asyncio.Event()
+
+    async def stalled_embedding(text: str) -> list[float]:
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
+        return []
+
+    settings = Settings(database_url="postgresql://unused", query_timeout_seconds=0.01)
+    embedding = FakeEmbeddingProvider()
+    embedding.embed_query = stalled_embedding  # type: ignore[method-assign]
+    generation = FakeGenerationProvider()
+    generation.generate = AsyncMock()  # type: ignore[method-assign]
+    service = QueryService(
+        settings=settings,
+        repository=FakeRepository(),  # type: ignore[arg-type]
+        embedding_provider=embedding,
+        generation_provider=generation,
+        rerank_provider=FakeRerankProvider(),
+        tracer=Tracer(settings),
+        metrics=Metrics("anchor_timeout_test"),
+    )
+
+    with pytest.raises(ProviderError, match="time budget"):
+        await service.execute("What is KYC?")
+
+    assert cancelled.is_set()
+    generation.generate.assert_not_awaited()
+
+
+@pytest.mark.parametrize("question,reason", [
+    ("What is the GST rate on stock brokerage?", "not_in_corpus"),
+    ("What does this rule require?", "ambiguous_question"),
+])
+async def test_unanswerable_questions_do_not_call_paid_providers(question: str, reason: str) -> None:
+    from unittest.mock import AsyncMock
+
+    settings = Settings(database_url="postgresql://unused")
+    embedding = FakeEmbeddingProvider()
+    embedding.embed_query = AsyncMock()  # type: ignore[method-assign]
+    generation = FakeGenerationProvider()
+    generation.generate = AsyncMock()  # type: ignore[method-assign]
+    rerank = FakeRerankProvider()
+    rerank.rerank = AsyncMock()  # type: ignore[method-assign]
+    service = QueryService(
+        settings=settings, repository=FakeRepository(),  # type: ignore[arg-type]
+        embedding_provider=embedding, generation_provider=generation,
+        rerank_provider=rerank, tracer=Tracer(settings), metrics=Metrics("anchor_scope_test"),
+    )
+
+    result = await service.execute(question)
+
+    assert result.response.refusal_reason == reason
+    embedding.embed_query.assert_not_awaited()
+    generation.generate.assert_not_awaited()
+    rerank.rerank.assert_not_awaited()
+
+
+async def test_followup_retrieval_uses_the_resolved_question_without_old_risk_category() -> None:
+    from unittest.mock import AsyncMock
+
+    standalone = "How often must banks update KYC for low-risk customers?"
+    repository = FakeRepository()
+    repository.lexical_search = AsyncMock(wraps=repository.lexical_search)  # type: ignore[method-assign]
+    embedding = FakeEmbeddingProvider()
+    embedding.embed_query = AsyncMock(wraps=embedding.embed_query)  # type: ignore[method-assign]
+    generation = FakeGenerationProvider()
+    generation.rewrite_question = AsyncMock(return_value=standalone)  # type: ignore[attr-defined]
+    settings = Settings(database_url="postgresql://unused")
+    service = QueryService(
+        settings=settings, repository=repository,  # type: ignore[arg-type]
+        embedding_provider=embedding, generation_provider=generation,
+        rerank_provider=FakeRerankProvider(), tracer=Tracer(settings), metrics=Metrics("anchor_rewrite_test"),
+    )
+    history = [
+        ConversationTurn(role="user", content="How often must banks update KYC for high-risk customers?"),
+        ConversationTurn(role="assistant", content="At least every two years."),
+    ]
+
+    result = await service.execute("What about those for low-risk customers?", history=history)
+
+    assert result.response.status == "answered"
+    generation.rewrite_question.assert_awaited_once_with("What about those for low-risk customers?", history)
+    repository.lexical_search.assert_awaited_once_with(standalone, settings.lexical_candidate_count)
+    embedding.embed_query.assert_awaited_once_with(standalone)
 
 
 def test_contextualize_question_adds_recent_history() -> None:

@@ -1,4 +1,6 @@
-from anchor.pipeline.citations import validate_and_hydrate_citations
+import pytest
+
+from anchor.pipeline.citations import validate_and_hydrate_citations, verified_quote
 from anchor.schemas import ModelCitation, ModelQueryResponse, RetrievedChunk
 
 
@@ -21,7 +23,7 @@ def test_citation_validation_success() -> None:
             status="answered",
             answer="Banks should perform customer due diligence before opening accounts.",
             refusal_reason=None,
-            citations=[ModelCitation(chunk_id="chunk-001")],
+            citations=[ModelCitation(chunk_id="chunk-001", quote=context_chunk().text)],
         ),
         [context_chunk()],
         max_rendered=4,
@@ -36,7 +38,7 @@ def test_citation_validation_rejects_unknown_chunk() -> None:
             status="answered",
             answer="Unsupported answer.",
             refusal_reason=None,
-            citations=[ModelCitation(chunk_id="chunk-999")],
+            citations=[ModelCitation(chunk_id="chunk-999", quote="Unsupported answer.")],
         ),
         [context_chunk()],
         max_rendered=4,
@@ -44,3 +46,53 @@ def test_citation_validation_rejects_unknown_chunk() -> None:
     assert valid is False
     assert citations == []
 
+
+def test_citation_returns_the_supporting_quote_instead_of_the_chunk_prefix() -> None:
+    chunk = context_chunk()
+    chunk.text = "An unrelated introduction. Banks must verify a new address within two months."
+    response = ModelQueryResponse(
+        status="answered", answer="Verify the address within two months. [1]",
+        citations=[ModelCitation(chunk_id=chunk.chunk_id, quote="Banks must verify a new address within two months.")],
+    )
+
+    valid, citations = validate_and_hydrate_citations(response, [chunk], max_rendered=4)
+
+    assert valid
+    assert citations[0].quote == "Banks must verify a new address within two months."
+
+
+@pytest.mark.parametrize("quote", ["Banks may open anonymous accounts.", "Banks should perform identification before opening accounts."])
+def test_fabricated_or_paraphrased_quotes_are_rejected(quote: str) -> None:
+    response = ModelQueryResponse(
+        status="answered", answer="An answer. [1]",
+        citations=[ModelCitation(chunk_id="chunk-001", quote=quote)],
+    )
+    assert validate_and_hydrate_citations(response, [context_chunk()], max_rendered=4) == (False, [])
+
+
+@pytest.mark.parametrize("answer", ["", "Unsupported marker. [2]", "Unsupported marker. [0]"])
+def test_empty_answers_and_unresolved_citation_markers_are_rejected(answer: str) -> None:
+    response = ModelQueryResponse(
+        status="answered", answer=answer,
+        citations=[ModelCitation(chunk_id="chunk-001", quote=context_chunk().text)],
+    )
+    assert validate_and_hydrate_citations(response, [context_chunk()], max_rendered=4) == (False, [])
+
+
+def test_every_citation_is_checked_even_after_the_render_limit() -> None:
+    response = ModelQueryResponse(
+        status="answered", answer="Supported answer. [1]",
+        citations=[ModelCitation(chunk_id="chunk-001", quote=context_chunk().text)]
+        + [ModelCitation(chunk_id=f"unknown-{i}", quote="Invented.") for i in range(4)],
+    )
+    assert validate_and_hydrate_citations(response, [context_chunk()], max_rendered=4) == (False, [])
+
+
+def test_abridged_quote_recovers_the_actual_intervening_source_conditions() -> None:
+    first = "Banks must waive collateral up to twenty lakh."
+    exception = "The requirement applies from April 2026."
+    last = "Banks may extend this waiver to twenty-five lakh."
+    source = f"{first} {exception} {last}"
+    assert verified_quote(f"{first} ... {last}", source) == source
+    assert verified_quote(f"{last} ... {first}", source) is None
+    assert verified_quote("Banks ... waive", source) is None

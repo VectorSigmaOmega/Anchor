@@ -25,6 +25,13 @@ STOPWORDS = {
     "with",
 }
 AMBIGUOUS_RE = re.compile(r"\b(this|that|these|those|it|latest|same)\b", re.IGNORECASE)
+TAX_TOPIC_RE = re.compile(r"\b(gst|goods and services tax|income tax|capital gains tax|tax rate|tax filing)\b", re.IGNORECASE)
+TAX_REQUEST_RE = re.compile(r"\b(rate|rates|filing|file|return|returns|deduct|deduction|taxable|payable)\b", re.IGNORECASE)
+
+
+def is_out_of_scope_question(question: str) -> bool:
+    # Incidental GST mentions in SEBI fee disclosures are still in scope.
+    return bool(TAX_TOPIC_RE.search(question) and TAX_REQUEST_RE.search(question))
 
 
 def is_ambiguous_question(question: str) -> bool:
@@ -60,6 +67,8 @@ def refusal_reason_for_context(
     *,
     ambiguity_question: str | None = None,
 ) -> str | None:
+    if is_out_of_scope_question(ambiguity_question or question):
+        return "not_in_corpus"
     if is_ambiguous_question(ambiguity_question or question):
         return "ambiguous_question"
     if not reranked_chunks:

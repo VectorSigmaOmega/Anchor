@@ -106,7 +106,7 @@ jobs:
             RATE_LIMIT_RPM=10
             RATE_LIMIT_RPD=100
             MAX_QUERY_CHARS=800
-            MAX_COMPLETION_TOKENS=1024
+            MAX_COMPLETION_TOKENS=2048
             CORS_ORIGIN=https://$ANCHOR_DOMAIN
             LANGFUSE_HOST=$LANGFUSE_HOST
             LANGFUSE_PUBLIC_KEY=$LANGFUSE_PUBLIC_KEY
@@ -178,6 +178,7 @@ jobs:
                 }
 
                 location /query {
+                    limit_req_status 429;
                     limit_req zone=anchor_rpm burst=5 nodelay;
                     proxy_pass http://127.0.0.1:8010/query;
                     proxy_http_version 1.1;
