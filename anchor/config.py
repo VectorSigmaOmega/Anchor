@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_api_base_url: str = "https://generativelanguage.googleapis.com/v1beta/models"
     generation_model: str = "gemini-3.1-flash-lite"
+    multipart_generation_model: str = "gemini-3.5-flash-lite"
     generation_thinking_level: Literal["minimal", "low", "medium", "high"] = "minimal"
     embedding_model: str = "gemini-embedding-2"
     embedding_dimension: int = 768
@@ -40,8 +41,12 @@ class Settings(BaseSettings):
     rerank_model: str = "rerank-v4.0-pro"
     rate_limit_rpm: int = Field(default=10, gt=0)
     rate_limit_rpd: int = Field(default=100, gt=0)
-    max_query_chars: int = 800
+    max_query_chars: int = Field(default=4000, gt=0)
     max_completion_tokens: int = 2048
+    multipart_max_completion_tokens: int = 4096
+    multipart_context_top_k: int = 16
+    multipart_rerank_candidate_count: int = 40
+    max_citations: int = 24
     rrf_constant: int = 60
     lexical_candidate_count: int = 30
     dense_candidate_count: int = 30

@@ -7,6 +7,7 @@ This document is the implementation contract for MVP. If `PRD.md` explains *what
 Default model assignments:
 
 - `GENERATION_MODEL=gemini-3.1-flash-lite`
+- `MULTIPART_GENERATION_MODEL=gemini-3.5-flash-lite` for expanded multipart context
 - `GENERATION_THINKING_LEVEL=minimal`
 - `EMBEDDING_MODEL=gemini-embedding-2`
 - `RERANK_MODEL=rerank-v4.0-pro`
@@ -447,7 +448,7 @@ Recommended defaults:
 
 - `RATE_LIMIT_RPM=10`
 - `RATE_LIMIT_RPD=100`
-- `MAX_QUERY_CHARS=800`
+- `MAX_QUERY_CHARS=4000`
 - `EMBEDDING_DIMENSION=768`
 - `MAX_COMPLETION_TOKENS=1024`
 

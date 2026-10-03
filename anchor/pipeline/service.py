@@ -22,12 +22,36 @@ from anchor.services.tracing import NullTrace, Tracer
 logger = logging.getLogger(__name__)
 DISCLAIMER = "Demo only. Not legal or financial advice."
 MAX_CONTEXT_TURNS = 4
-MAX_CONTEXT_TURN_CHARS = 800
+MAX_CONTEXT_TURN_CHARS = 4000
 DIRECT_ANSWER_RE = re.compile(
     r"\b(just|only|simply)?\s*(give|tell|provide|answer)\b.*\b(answer|it)\b",
     re.IGNORECASE,
 )
 FOLLOWUP_RE = re.compile(r"\b(this|that|these|those|it|they|their|same)\b|^(what|how) about\b", re.IGNORECASE)
+
+
+def is_multipart_question(question: str) -> bool:
+    numbered_parts = re.findall(r"\(\d+\)|(?:^|\n)\s*\d+[.)]", question)
+    return (
+        len(numbered_parts) >= 2
+        or question.count(";") >= 2
+        or question.count("?") >= 2
+        or (len(question.split()) >= 30 and bool(re.search(r"\b(compare|separately)\b", question, re.IGNORECASE)))
+    )
+
+
+def balanced_candidates(pools: Sequence[list[RetrievedChunk]], limit: int) -> list[RetrievedChunk]:
+    """Reserve candidate space for every search rather than one dominant topic."""
+    selected: list[RetrievedChunk] = []
+    seen: set[str] = set()
+    for rank in range(max((len(pool) for pool in pools), default=0)):
+        for pool in pools:
+            if rank < len(pool) and pool[rank].chunk_id not in seen:
+                selected.append(pool[rank])
+                seen.add(pool[rank].chunk_id)
+                if len(selected) == limit:
+                    return selected
+    return selected
 
 
 def needs_question_rewrite(question: str) -> bool:
@@ -149,10 +173,32 @@ class QueryService:
                 search_questions.append(resolved_question)
             if contextual_question != question and not was_rewritten:
                 search_questions.append(question)
+            planned_questions: list[str] = []
+            planner = getattr(self.generation_provider, "plan_retrieval_questions", None)
+            if is_multipart_question(resolved_question) and callable(planner):
+                plan_span = trace.span("retrieval_plan", input={"question": resolved_question})
+                planned_questions = await planner(resolved_question)
+                plan_span.end(output={"questions": planned_questions})
+                search_questions.extend(q for q in planned_questions if q not in search_questions)
             lexical_results, dense_results = await self._search(search_questions, trace)
             fused_chunks = self._fuse(lexical_results, dense_results, trace)
-            fused_pool = fused_chunks[: self.settings.rerank_candidate_count]
-            reranked = await self._rerank(resolved_question if was_rewritten else contextual_question, fused_pool, trace)
+            topic_pools: list[list[RetrievedChunk]] = []
+            if planned_questions:
+                for search_question, lexical, dense in zip(search_questions, lexical_results, dense_results, strict=True):
+                    if search_question in planned_questions:
+                        topic_pools.append(fuse_ranked_chunk_lists(
+                            [(self._content_passages(lexical), "lexical_score"),
+                             (self._content_passages(dense), "dense_score")],
+                            constant=self.settings.rrf_constant,
+                        ))
+                candidate_count = self.settings.multipart_rerank_candidate_count
+                fused_pool = balanced_candidates([*topic_pools, fused_chunks], candidate_count)
+            else:
+                fused_pool = fused_chunks[: self.settings.rerank_candidate_count]
+            reranked = await self._rerank(
+                resolved_question if was_rewritten else contextual_question, fused_pool, trace,
+                top_n=len(fused_pool) if topic_pools else None,
+            )
             reranked, hinted_titles = self._apply_document_hints(contextual_question, reranked, trace)
             context_span = trace.span("context_selection", input={"reranked_count": len(reranked)})
             context_chunks = self._select_context(
@@ -161,6 +207,8 @@ class QueryService:
                 reranked,
                 hinted_titles,
             )
+            if topic_pools:
+                context_chunks = self._select_multipart_context(reranked, topic_pools)
             context_span.end(
                 output={
                     "context_count": len(context_chunks),
@@ -191,7 +239,7 @@ class QueryService:
                     input={"model_status": model_response.status},
                 )
                 hydrated = validate_and_hydrate_citations(
-                    model_response, context_chunks, max_rendered=4
+                    model_response, context_chunks, max_rendered=self.settings.max_citations
                 )
                 if not hydrated[0]:
                     try:
@@ -205,7 +253,7 @@ class QueryService:
                         hydrated = (False, [])
                     else:
                         hydrated = validate_and_hydrate_citations(
-                            retry_response, context_chunks, max_rendered=4
+                            retry_response, context_chunks, max_rendered=self.settings.max_citations
                         )
                         model_response = retry_response
                 validation_span.end(
@@ -343,14 +391,15 @@ class QueryService:
             raise
 
     async def _rerank(
-        self, question: str, fused_pool: list[RetrievedChunk], trace: NullTrace
+        self, question: str, fused_pool: list[RetrievedChunk], trace: NullTrace,
+        *, top_n: int | None = None,
     ) -> list[RetrievedChunk]:
         span = trace.span("rerank", input={"candidate_count": len(fused_pool)})
         try:
             reranked = await self.rerank_provider.rerank(
                 question,
                 fused_pool,
-                top_n=self.settings.rerank_top_k,
+                top_n=top_n if top_n is not None else self.settings.rerank_top_k,
             )
             span.end(
                 output={
@@ -420,6 +469,25 @@ class QueryService:
             return hinted_context
         return default_context
 
+    def _select_multipart_context(
+        self, reranked: list[RetrievedChunk], topic_pools: list[list[RetrievedChunk]],
+    ) -> list[RetrievedChunk]:
+        supported = {
+            c.chunk_id: c for c in reranked
+            if (c.relevance_score or 0.0) >= self.settings.rerank_min_support_score
+        }
+        pools = [
+            sorted(
+                [supported[c.chunk_id] for c in pool if c.chunk_id in supported],
+                key=lambda c: c.relevance_score or 0.0, reverse=True,
+            )[:2]
+            for pool in topic_pools
+        ]
+        reserved = balanced_candidates(pools, self.settings.multipart_context_top_k)
+        seen = {c.chunk_id for c in reserved}
+        reserved.extend(c for c in reranked if c.chunk_id in supported and c.chunk_id not in seen)
+        return reserved[:self.settings.multipart_context_top_k]
+
     async def _generate(
         self,
         question: str,
@@ -429,7 +497,7 @@ class QueryService:
     ) -> ModelQueryResponse:
         span = trace.generation(
             "generation",
-            model=self.settings.generation_model,
+            model=getattr(self.generation_provider, "model_for_context", lambda _: self.settings.generation_model)(context_chunks),
             input={"context_chunks": len(context_chunks)},
         )
         response = await self.generation_provider.generate(
@@ -486,8 +554,7 @@ class QueryService:
             latency_ms=self._latency_ms(started),
         )
 
-    @staticmethod
-    def _validation_retry_note(model_response: ModelQueryResponse) -> str:
+    def _validation_retry_note(self, model_response: ModelQueryResponse) -> str:
         if model_response.status == "refused" and (model_response.answer or model_response.citations):
             return (
                 "Your previous output was invalid because status='refused' included an answer and/or citations. "
@@ -497,10 +564,14 @@ class QueryService:
                 "answer, a refusal_reason, and citations=[]."
             )
         return (
-            "Your previous output was invalid. Use only allowed chunk IDs from the context, return plain text "
+            "Your previous output was invalid. Use only supplied sources and return plain text "
             "without markdown tables or HTML, and keep refused responses empty with no citations. "
-            "Each citation must include a verbatim contiguous quote copied exactly from its chunk. "
-            "Use at most four unique chunks; inline [n] markers must refer to the returned citation order. "
+            "If labelled E excerpts are supplied, use their [E...] references "
+            "in answer text; the server supplies the exact quotes and numbered references. "
+            "Otherwise each citation must include a verbatim contiguous quote copied exactly from its chunk. "
+            f"Use at most {self.settings.max_citations} distinct citations. For the legacy quote format, inline [n] markers must refer to "
+            "the one-based returned citation order, never chunk ID suffixes. "
+            "Copy table rows exactly including vertical bars, and never reconstruct quotations. "
             "For an answered response, omit refusal_reason."
         )
 

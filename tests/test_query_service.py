@@ -158,6 +158,68 @@ class FakeRerankProvider:
         return reranked
 
 
+async def test_multipart_search_keeps_deposit_evidence_when_fee_results_dominate():
+    from unittest.mock import AsyncMock
+
+    fees = [research_chunk(f"fee-{n}", "Research analyst annual fee rules apply.") for n in range(25)]
+    deposit = research_chunk("deposit", "Research analyst deposit is based on prior-year client counts.")
+    weak = research_chunk("unrelated", "A poorly supported unrelated rule.")
+
+    class Repository:
+        async def lexical_search(self, question, limit):
+            return [deposit, weak] if question == "Research analyst client deposits" else fees
+
+        async def dense_search(self, embedding, limit):
+            return []
+
+    class Reranker(FakeRerankProvider):
+        async def rerank(self, question, candidates, top_n):
+            result = await super().rerank(question, candidates, top_n)
+            for c in result:
+                if c.chunk_id == "unrelated":
+                    c.relevance_score = 0.01
+            return result
+
+    settings = Settings(_env_file=None, database_url="postgresql://unused")
+    generation = FakeGenerationProvider()
+    generation.plan_retrieval_questions = AsyncMock(return_value=[
+        "Research analyst annual fees", "Research analyst client deposits",
+    ])
+    reranker = Reranker()
+    reranker.rerank = AsyncMock(wraps=reranker.rerank)
+    service = QueryService(settings=settings, repository=Repository(), embedding_provider=FakeEmbeddingProvider(),
+                           generation_provider=generation, rerank_provider=reranker,
+                           tracer=Tracer(settings), metrics=Metrics("multipart_test"))
+    result = await service.execute("Compare SEBI research analyst requirements: annual fees; deposits; client counts.")
+    assert result.response.status == "answered"
+    assert "deposit" in {c.chunk_id for c in result.context_chunks}
+    assert "unrelated" not in {c.chunk_id for c in result.context_chunks}
+    reranker.rerank.assert_awaited_once()
+    generation.plan_retrieval_questions.assert_awaited_once()
+
+
+async def test_ordinary_question_does_not_add_a_paid_planning_call():
+    from unittest.mock import AsyncMock
+
+    settings = Settings(_env_file=None, database_url="postgresql://unused")
+    generation = FakeGenerationProvider()
+    generation.plan_retrieval_questions = AsyncMock()
+    service = QueryService(settings=settings, repository=FakeRepository(), embedding_provider=FakeEmbeddingProvider(),
+                           generation_provider=generation, rerank_provider=FakeRerankProvider(),
+                           tracer=Tracer(settings), metrics=Metrics("ordinary_question_test"))
+    await service.execute("What is the RBI KYC requirement?")
+    generation.plan_retrieval_questions.assert_not_awaited()
+
+
+def test_long_question_and_answer_history_remain_usable_for_followups():
+    question = "Explain SEBI requirements. " + ("x" * 3930) + " and the final deposit deadline."
+    history = [ConversationTurn(role="user", content=question),
+               ConversationTurn(role="assistant", content="A detailed supported answer. " * 200)]
+    rendered = contextualize_question("What about those deposits?", history)
+    assert "and the final deposit deadline." in rendered
+    assert rendered.endswith("Current question: What about those deposits?")
+
+
 @pytest.mark.parametrize("stage", ["embedding", "rerank"])
 async def test_provider_outage_is_not_reported_as_a_corpus_refusal(stage: str) -> None:
     from unittest.mock import AsyncMock
