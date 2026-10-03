@@ -1,7 +1,7 @@
 # Bounded LangGraph workflow — 3 October 2026
 
 The prototype is implemented and tested, but **disabled by default** and not
-approved for production rollout. The five-question comparison shows improvements
+ready for production rollout. The five-question comparison shows improvements
 in some coverage and calculations, alongside missed material facts, inconsistent
 claim verification and substantially higher token use. LangGraph provides the
 control flow; it does not make the underlying model a reliable judge.
@@ -86,10 +86,11 @@ results do not justify enabling this workflow as implemented.
 ## Validation and next change
 
 The full local suite passed 145 tests before three additional focused guard tests;
-those added checks cover complete exact-claim review, discretion mismatch and
-removal of faulty ledger notes during repair. CI runs the entire suite, including
-six PostgreSQL integration tests. Tests establish control flow and guard behavior,
-not the correctness of Gemini's source interpretation.
+all 12 focused workflow/provider tests then passed. CI run 37154608046 passed all
+148 tests, including six PostgreSQL integration tests, plus lint, UI export, smoke
+evaluation and Docker build. The added guards cover complete exact-claim review,
+discretion mismatch and removal of faulty ledger notes during repair. Tests establish
+control flow and guard behavior, not the correctness of Gemini's source interpretation.
 
 All 27 existing ordinary-question regression checks passed on the corrected index
 with normal configured model routing. Production chunking rollout passed CI and
