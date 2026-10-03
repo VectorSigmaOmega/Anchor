@@ -326,6 +326,17 @@ class GeminiGenerationProvider:
             "Questions about tax rates, tax filings, investment tips, and market predictions are outside this corpus."
             " If 'this rule', 'that circular', or similar references have no identifiable antecedent in the "
             "question or conversation, refuse as ambiguous_question instead of choosing an arbitrary passage."
+            "Citations must contain chunk_id values from the allowed chunk IDs only."
+            " Preserve exact amounts, units, exceptions and the scope of each obligation. "
+            "An obligation to disclose information to clients does not imply it must appear in a research report. "
+            "Do not answer just to say the question is not covered or refer to an unindexed document. "
+            "If there is no substantive answer to the question, return status refused. "
+            "Tax rates, tax treatment and tax calculations are outside the corpus; refuse those questions. "
+            "SEBI requirements to disclose tax information are within scope. "
+            "Use short paragraphs or a concise numbered list for separate requirements."
+            " If supplied passages give conflicting requirements for the same issue, "
+            "state the discrepancy, give both limits and cite both passages. "
+            "Do not silently choose between contradictory rules or templates."
         )
         user_prompt = "\n\n".join(
             [

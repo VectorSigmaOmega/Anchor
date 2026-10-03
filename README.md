@@ -13,7 +13,7 @@ Anchor is a narrow, production-shaped RAG system over a fixed corpus of official
 
 - FastAPI
 - PostgreSQL + pgvector
-- Gemini Developer API for embeddings and generation
+- Gemini Developer API or OpenAI for embeddings and generation (configured independently)
 - Cohere Rerank API
 - first-party provider adapters
 - Langfuse for tracing
@@ -158,6 +158,26 @@ Full eval runs the direct query service against the indexed corpus and requires 
 ```bash
 ./.venv/bin/python eval/run.py --write-docs
 ```
+
+The substantive regulatory benchmark checks limits, exemptions, disclosures,
+refusals, contradictory passages and follow-ups. It saves the complete answers
+and retrieved context for review:
+
+```bash
+make benchmark
+```
+
+Phrase and expected-document checks are regression signals; inspect the saved
+context to assess whether each claim is supported. Local corpus setup is
+documented in [docs/LOCAL_DEV.md](docs/LOCAL_DEV.md).
+
+For OpenAI, set `GENERATION_PROVIDER=openai` and `GENERATION_MODEL=gpt-4.1-mini`.
+Set `EMBEDDING_PROVIDER=openai`, `EMBEDDING_MODEL=text-embedding-3-small` and
+`OPENAI_API_KEY` to switch embeddings. Keep `EMBEDDING_DIMENSION=768` for the
+existing schema and run `python -m anchor.ingest.reembed` before restarting the
+query service. The index records its embedding model and rejects incompatible
+query vectors. Re-embedding uses the existing indexed text and commits all
+vectors together; it preserves the old index if any batch fails.
 
 ## Deployment Notes
 
