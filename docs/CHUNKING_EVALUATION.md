@@ -1,8 +1,9 @@
 # Chunking pilot — 3 October 2026
 
-Both experimental variants improved the amount of quotable evidence retrieved,
-but both introduced an MSME paragraph-splitting regression. Keep the production
-index until the parser is corrected and the focused checks are repeated.
+The corrected structure-aware parser is ready for rollout: the follow-up fixes
+the pilot regressions, retains all checked source passages, and improves focused
+retrieval coverage from 28/36 to 35/36. The original pilot is recorded below,
+followed by the corrected parser results.
 
 This evaluates parsing and chunk boundaries. Complex multi-document planning,
 evidence verification and answer repair belong to the separate LangGraph work.
@@ -153,3 +154,51 @@ oversized-block preservation, heading/condition availability, incomplete/repeate
 table values, regex quantifier handling and document-specific evidence checks.
 Local validation finished with 126 tests passed, 3 skipped, and clean Ruff checks.
 CI was not invoked for this experimental branch.
+
+## Corrected parser and rollout candidate
+
+The follow-up in `layout-structured-v2` fixes the two source-layout regressions:
+font size alone no longer creates headings, and headings are detected inside
+mixed heading/body blocks. Adjacent body lines remain together across font
+changes. Chapter/annexure boundaries reset breadcrumbs; headings remain in
+quotable text. No retrieval or generation prompts changed in this rerun.
+The original pilot code and measurements above remain reproducible at `ce23896`.
+
+The corrected structured index has 4,012 chunks (median 149.5 words, maximum
+450), compared with 6,979 in the copied production index. The all-source audit
+again covers 2,153 pages, detects no reduced alphanumeric inventories, and finds
+all 36 checked passages within individual indexed chunks. Parsed word retention
+and the hard chunk bound pass for all 16 documents.
+
+With the same cached plans/query vectors and Gemini 3.5 Flash Lite controls, the
+ten focused reruns retrieve 35/36 checked passages into final context (baseline
+28/36), with complete checked context in 9/10 cases. The missing passage is the
+MSME amendment effective-date footnote; it exists in the index but retrieval did
+not select it. The restored MSME answer gives the mandatory ₹20 lakh waiver and
+discretionary ₹25 lakh extension. The EBP answer attributes rules to Chapter VI.
+Two additional source-reviewed questions, NBFC public-deposit maturity and
+commercial-bank PSL targets/denominators, return the correct supported answers.
+
+These are passage and boundary checks, not an overall answer-quality score.
+Remaining generation issues include omission of a retrieved KYC balance exception
+and an ICDR answer introducing an RTA T+2 passage alongside the ICDR T+1 rule.
+The separate workflow evaluation must check scope, historical footnotes and claim
+support. No further chunk tuning was made in response to these answer defects.
+
+Generation input across the ten focused reruns totals 39,987 tokens (+6.5% versus
+baseline), with 16,320 context words. Median measured execution is 2.433 seconds,
+again excluding planning and query embedding; one run cannot establish live speed.
+Local verification passes 134 tests, including six real PostgreSQL integration
+checks. The reindex tests prove provider-failure rollback, continued access to the
+old index during embedding, atomic replacement, and rejection of invalid bundles.
+
+`python -m anchor.ingest.rechunk` verifies source checksums, stages the entire
+replacement and commits it atomically. `--prepared-index` reuses evaluated vectors
+only when their profile, source hashes and complete chunk records exactly match
+a fresh parse. CI/CD's `run_rechunk` input saves a corpus-only backup first.
+Document chunking versions ensure unchanged PDFs are not silently skipped after
+a parser change. The existing index remains available until the final swap.
+
+Fresh artifacts live in ignored `.benchmarks/chunking-v2`, preserving the pilot.
+Set `CHUNKING_ARTIFACT_DIR` when repeating preparation/audit/evaluation, and use
+`python -m scripts.export_rechunk_index` to export the evaluated replacement.

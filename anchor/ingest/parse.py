@@ -3,18 +3,12 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import fitz
 from bs4 import BeautifulSoup
 
+from anchor.ingest.layout import normalize_text, parse_layout, table_text
 from anchor.schemas import DocumentRecord, ParsedBlock, ParsedDocument
 
 HEADING_RE = re.compile(r"^((\d+(\.\d+)*)|([IVXLC]+))[.)]?\s+\S+")
-
-
-def normalize_text(text: str | None) -> str:
-    if text is None:
-        return ""
-    return " ".join(text.replace("\u00a0", " ").split())
 
 
 def looks_like_heading(text: str) -> bool:
@@ -28,36 +22,11 @@ def looks_like_heading(text: str) -> bool:
 
 
 def serialize_table(rows: list[list[str | None]]) -> str:
-    rendered_rows = []
-    for row in rows:
-        cleaned = [normalize_text(cell) for cell in row if normalize_text(cell)]
-        if cleaned:
-            rendered_rows.append(" | ".join(cleaned))
-    return "\n".join(rendered_rows)
+    return table_text(rows)
 
 
 def parse_pdf(document: DocumentRecord, path: Path) -> ParsedDocument:
-    blocks: list[ParsedBlock] = []
-    with fitz.open(path) as pdf:
-        for page_index, page in enumerate(pdf, start=1):
-            try:
-                tables = page.find_tables()
-            except Exception:
-                tables = None
-            if tables:
-                for table in tables.tables:
-                    table_text = serialize_table(table.extract())
-                    if table_text:
-                        blocks.append(
-                            ParsedBlock(text=table_text, page=page_index, block_type="table")
-                        )
-            for raw_block in page.get_text("blocks", sort=True):
-                text = normalize_text(raw_block[4])
-                if not text:
-                    continue
-                block_type = "heading" if looks_like_heading(text) else "paragraph"
-                blocks.append(ParsedBlock(text=text, page=page_index, block_type=block_type))
-    return ParsedDocument(document=document, blocks=blocks)
+    return parse_layout(document, path)
 
 
 def parse_html(document: DocumentRecord, path: Path) -> ParsedDocument:

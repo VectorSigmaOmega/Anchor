@@ -108,3 +108,38 @@ def test_pdf_table_is_interleaved_and_not_extracted_twice(tmp_path, monkeypatch,
         assert text.count("Eligible") >= 2
     else:
         assert text.count("Eligible") == 2
+
+
+def test_larger_body_font_does_not_split_amount_from_obligation(tmp_path):
+    path = tmp_path / "font-change.pdf"
+    pdf = fitz.open()
+    page = pdf.new_page()
+    page.insert_text((50, 50), "4.1 Collateral", fontname="hebo", fontsize=11)
+    page.insert_text((50, 80), "Banks are mandated not to accept collateral for loans up to", fontsize=12)
+    page.insert_text((50, 100), "20 lakh extended to units in the MSE sector.", fontsize=12)
+    page.insert_text((50, 150), "Other body text " * 6, fontsize=11)
+    pdf.save(path)
+    pdf.close()
+    parsed = parse_layout(document(), path)
+    assert [b.text for b in parsed.blocks if b.block_type == "heading"] == ["4.1 Collateral"]
+    chunks = build_variant(parsed, "structured")
+    assert any("mandated not to accept" in c.text and "20 lakh" in c.text for c in chunks)
+
+
+def test_chapter_heading_in_mixed_block_resets_section(tmp_path):
+    path = tmp_path / "mixed.pdf"
+    pdf = fitz.open()
+    page = pdf.new_page()
+    page.insert_text((50, 50), "Chapter V - Denomination", fontname="hebo", fontsize=12)
+    page.insert_text((50, 100), "Chapter VI - Electronic Book Provider platform", fontname="hebo", fontsize=12)
+    page.insert_text((50, 116), "Primary issuances shall comply with the stipulations provided", fontname="hebo", fontsize=12)
+    page.insert_text((50, 132), "in this chapter.", fontname="hebo", fontsize=12)
+    page.insert_text((50, 165), "1. Eligible issuers must use the platform for prescribed issues.", fontsize=12)
+    pdf.save(path)
+    pdf.close()
+    parsed = parse_layout(document(), path)
+    chunks = build_variant(parsed, "structured")
+    rules = next(c for c in chunks if "Eligible issuers" in c.text)
+    assert "Chapter VI - Electronic Book Provider platform" in rules.section_path
+    assert "Chapter V - Denomination" not in rules.section_path
+    assert "Primary issuances shall comply" in rules.text

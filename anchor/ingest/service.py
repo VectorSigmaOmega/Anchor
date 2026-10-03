@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 from anchor.db.repository import AnchorRepository
-from anchor.ingest.chunk import build_chunks
+from anchor.ingest.chunk import CHUNKING_VERSION, build_chunks
 from anchor.ingest.fetch import DocumentFetcher, file_sha256
 from anchor.ingest.manifest import active_documents, load_manifest
 from anchor.ingest.parse import parse_document
@@ -39,7 +39,8 @@ class IngestionService:
             for document in active_docs:
                 docs_seen += 1
                 version = await self.repository.get_document_version(document.doc_id)
-                if version and version.sha256 == document.sha256 and version.chunk_count > 0:
+                if (version and version.sha256 == document.sha256 and version.chunk_count > 0
+                        and version.chunking_version == CHUNKING_VERSION):
                     continue
 
                 path = await self.fetcher.fetch(document)

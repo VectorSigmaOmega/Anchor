@@ -3,6 +3,7 @@
 import argparse
 import asyncio
 import json
+import os
 from collections import Counter
 from hashlib import sha256
 from pathlib import Path
@@ -21,7 +22,7 @@ from anchor.providers.gemini import GeminiEmbeddingProvider
 from anchor.schemas import ChunkRecord
 from scripts.chunking_variants import build_variant, parse_layout
 
-ROOT = Path(".benchmarks/chunking")
+ROOT = Path(os.environ.get("CHUNKING_ARTIFACT_DIR", ".benchmarks/chunking"))
 
 
 def experiment_settings(base: Settings, strategy: str) -> Settings:

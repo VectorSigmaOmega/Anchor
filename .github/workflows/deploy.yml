@@ -3,6 +3,12 @@ name: deploy
 on:
   workflow_dispatch:
     inputs:
+      run_rechunk:
+        description: "Atomically rebuild chunks from verified corpus files (reuse prepared index when present)"
+        required: false
+        default: "false"
+        type: choice
+        options: ["false", "true"]
       run_reembed:
         description: "Atomically replace corpus embeddings with the configured model"
         required: false
@@ -47,6 +53,7 @@ jobs:
       RELEASE_ID: ${{ github.sha }}-${{ github.run_id }}
       RELEASE_SHA: ${{ github.sha }}
       RUN_INGEST: ${{ github.event.inputs.run_ingest || 'false' }}
+      RUN_RECHUNK: ${{ github.event.inputs.run_rechunk || 'false' }}
       RUN_REEMBED: ${{ github.event.inputs.run_reembed || 'false' }}
 
     steps:
@@ -56,7 +63,7 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          envs: ANCHOR_DOMAIN,ANCHOR_DB_PASSWORD,COHERE_API_KEY,GEMINI_API_KEY,OPENAI_API_KEY,GENERATION_PROVIDER,EMBEDDING_PROVIDER,GENERATION_MODEL,MULTIPART_GENERATION_MODEL,EMBEDDING_MODEL,EMBEDDING_BATCH_PAUSE_SECONDS,LANGFUSE_HOST,LANGFUSE_PUBLIC_KEY,LANGFUSE_SECRET_KEY,LETSENCRYPT_EMAIL,RELEASE_ID,RELEASE_SHA,RUN_INGEST,RUN_REEMBED
+          envs: ANCHOR_DOMAIN,ANCHOR_DB_PASSWORD,COHERE_API_KEY,GEMINI_API_KEY,OPENAI_API_KEY,GENERATION_PROVIDER,EMBEDDING_PROVIDER,GENERATION_MODEL,MULTIPART_GENERATION_MODEL,EMBEDDING_MODEL,EMBEDDING_BATCH_PAUSE_SECONDS,LANGFUSE_HOST,LANGFUSE_PUBLIC_KEY,LANGFUSE_SECRET_KEY,LETSENCRYPT_EMAIL,RELEASE_ID,RELEASE_SHA,RUN_INGEST,RUN_REEMBED,RUN_RECHUNK
           command_timeout: 120m
           script: |
             set -euo pipefail
@@ -167,6 +174,15 @@ jobs:
               sudo -u postgres pg_dump -d anchor --format=custom --table=public.documents --table=public.chunks --table=public.corpus_embedding_profile | sudo tee "/var/lib/anchor/corpus/pre-reembed-$RELEASE_ID.dump" >/dev/null
               sudo chmod 0600 "/var/lib/anchor/corpus/pre-reembed-$RELEASE_ID.dump"
               sudo -u anchor bash -lc "cd '$release_dir' && set -a && . /etc/anchor/anchor.env && set +a && .venv/bin/python -m anchor.ingest.reembed"
+            fi
+            if [ "$RUN_RECHUNK" = "true" ]; then
+              sudo -u postgres pg_dump -d anchor --format=custom --table=public.documents --table=public.chunks --table=public.corpus_embedding_profile | sudo tee "/var/lib/anchor/corpus/pre-rechunk-$RELEASE_ID.dump" >/dev/null
+              sudo chmod 0600 "/var/lib/anchor/corpus/pre-rechunk-$RELEASE_ID.dump"
+              prepared_arg=""
+              if sudo test -f /var/lib/anchor/corpus/prepared-rechunk.jsonl; then
+                prepared_arg="--prepared-index /var/lib/anchor/corpus/prepared-rechunk.jsonl"
+              fi
+              sudo -u anchor bash -lc "cd '$release_dir' && set -a && . /etc/anchor/anchor.env && set +a && .venv/bin/python -m anchor.ingest.rechunk $prepared_arg"
             fi
             if [ "$RUN_INGEST" = "true" ]; then
               sudo -u anchor bash -lc "cd '$release_dir' && set -a && . /etc/anchor/anchor.env && set +a && .venv/bin/python -m anchor.ingest.cli"

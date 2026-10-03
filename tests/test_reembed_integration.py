@@ -96,3 +96,76 @@ async def test_queries_can_read_old_index_while_replacement_is_generated(corpus,
     finally:
         continue_generation.set()
         await migration
+
+
+@pytest.fixture
+def rechunk_corpus(corpus, monkeypatch, tmp_path):
+    from anchor.ingest import rechunk
+    from anchor.schemas import DocumentRecord, Manifest, ParsedBlock, ParsedDocument
+
+    settings = Settings(
+        _env_file=None, database_url=TEST_DATABASE_URL, gemini_api_key="test-key",
+        raw_corpus_dir=tmp_path, embedding_batch_size=1, embedding_batch_pause_seconds=0,
+    )
+    document = DocumentRecord(doc_id="fixture", title="Fixture", regulator="RBI", doc_type="master_direction",
+                              source_url="https://example.invalid", snapshot_date="2026-05-02", sha256="hash", format="pdf")
+    monkeypatch.setattr(rechunk, "get_settings", lambda: settings)
+    monkeypatch.setattr(rechunk, "load_manifest", lambda settings: Manifest(snapshot_date="2026-05-02", documents=[document]))
+
+    async def fetch(self, document):
+        return tmp_path / "fixture.pdf"
+
+    monkeypatch.setattr(rechunk.DocumentFetcher, "fetch", fetch)
+    monkeypatch.setattr(rechunk, "file_sha256", lambda path: "hash")
+    monkeypatch.setattr(rechunk, "parse_document", lambda document, path: ParsedDocument(
+        document=document, blocks=[ParsedBlock(text="word " * 500, page=1)],
+    ))
+    return rechunk
+
+
+async def test_rechunk_provider_failure_preserves_complete_old_index(rechunk_corpus, monkeypatch):
+    monkeypatch.setattr(rechunk_corpus, "build_embedding_provider", lambda settings: FakeEmbeddings(fail=True))
+    with pytest.raises(RuntimeError, match="provider outage"):
+        await rechunk_corpus.run()
+    with psycopg.connect(TEST_DATABASE_URL) as conn:
+        assert conn.execute("SELECT chunk_id,text FROM chunks ORDER BY chunk_id").fetchall() == [("0", "Source text"), ("1", "Source text")]
+        assert conn.execute("SELECT chunking_version FROM documents").fetchone() == ("legacy-v1",)
+
+
+async def test_rechunk_readers_keep_old_index_until_atomic_swap(rechunk_corpus, monkeypatch):
+    from anchor.ingest.chunk import CHUNKING_VERSION
+
+    generating = asyncio.Event()
+    continue_generation = asyncio.Event()
+
+    class PausedEmbeddings(FakeEmbeddings):
+        async def embed_documents(self, texts):
+            generating.set()
+            await continue_generation.wait()
+            return await super().embed_documents(texts)
+
+    monkeypatch.setattr(rechunk_corpus, "build_embedding_provider", lambda settings: PausedEmbeddings())
+    task = asyncio.create_task(rechunk_corpus.run())
+    try:
+        await asyncio.wait_for(generating.wait(), timeout=5)
+        async with await psycopg.AsyncConnection.connect(TEST_DATABASE_URL, options="-c statement_timeout=1000") as conn:
+            await conn.execute("SELECT provider FROM corpus_embedding_profile FOR SHARE")
+            assert await (await conn.execute("SELECT chunk_id FROM chunks ORDER BY chunk_id")).fetchall() == [("0",), ("1",)]
+    finally:
+        continue_generation.set()
+        await task
+    with psycopg.connect(TEST_DATABASE_URL) as conn:
+        rows = conn.execute("SELECT chunk_id,text,embedding::text FROM chunks ORDER BY chunk_index").fetchall()
+        assert len(rows) == 2
+        assert all(row[0].startswith("fixture::structured_") and row[2] == NEW_VECTOR for row in rows)
+        assert sum(len(row[1].split()) for row in rows) == 500
+        assert conn.execute("SELECT chunking_version FROM documents").fetchone() == (CHUNKING_VERSION,)
+
+
+async def test_rechunk_rejects_mismatched_prepared_bundle_before_swap(rechunk_corpus, tmp_path):
+    path = tmp_path / "bundle.jsonl"
+    path.write_text('{}\n')
+    with pytest.raises(ValueError, match="Prepared index"):
+        await rechunk_corpus.run(path)
+    with psycopg.connect(TEST_DATABASE_URL) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM chunks").fetchone() == (2,)
