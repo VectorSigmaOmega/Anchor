@@ -155,7 +155,9 @@ jobs:
             npm ci --no-audit --no-fund
             npm run build
             sudo mkdir -p /var/www/anchor/ui
-            sudo rsync -a --delete out/ /var/www/anchor/ui/
+            # Keep hashed assets referenced by pages already open in browsers.
+            sudo rsync -a out/_next/ /var/www/anchor/ui/_next/
+            sudo rsync -a --delete --exclude _next out/ /var/www/anchor/ui/
             cd /opt/anchor/current
             sudo chown -R anchor:anchor "/opt/anchor/releases/$RELEASE_ID"
             sudo -u anchor bash -lc "cd /opt/anchor/current && set -a && . /etc/anchor/anchor.env && set +a && .venv/bin/python -m anchor.db.migrate"
@@ -197,6 +199,7 @@ jobs:
                 add_header Referrer-Policy "same-origin" always;
 
                 location = / {
+                    expires -1;
                     try_files /index.html =404;
                 }
 
@@ -246,6 +249,7 @@ jobs:
                 }
 
                 location / {
+                    expires -1;
                     try_files \$uri \$uri.html \$uri/ /index.html;
                 }
             }

@@ -105,3 +105,10 @@ python -m anchor.ingest.reembed
 Run `python -m scripts.benchmark_answers` against the restored or deployed
 corpus to inspect substantive answers. This is distinct from the older
 document-lookup golden set and fixture smoke checks.
+
+## Browser cache during releases
+
+HTML and static route payloads use `Cache-Control: no-cache` so navigation
+revalidates them. Hashed `/_next/` files retain their asset cache and are copied
+without deleting previous hashes. This keeps already-open pages and previously
+cached HTML functional during and after deployment.
