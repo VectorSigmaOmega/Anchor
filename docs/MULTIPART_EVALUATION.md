@@ -91,12 +91,25 @@ The default 6.5-second pause respects the trial reranker quota. An explicit
 `--models` pins both ordinary and multipart generation for a model comparison.
 
 Local verification passed 116 tests, with three real-PostgreSQL integration tests
-skipped locally and covered by CI. Frontend lint and static export passed.
+skipped locally. CI ran all 119 tests successfully, including those integration
+tests. Frontend lint and static export passed.
 Playwright checked `/` and `/chat` at widths 360, 768, 1,100 and 1,440: full drafts
 and 4,001-character drafts were preserved, errors were visible, and no horizontal
 overflow was found. A local browser query returned a complete answer in 10.248 s;
 reloading/selecting its saved conversation and asking why current counts do not
 determine deposits also returned HTTP 200 with supported citations.
+
+After deployment, Playwright submitted the complete 1,196-character question to
+`anchor.abhinash.dev`. The server returned HTTP 200, status `answered`, in 8.068 s
+with 15 citations from both circulars; all reviewed fact checks passed. The
+[public response artifact](../eval/reports/multipart-public-2026-10-03.json)
+preserves that result. Citation lists use per-message citation numbers as unique
+display keys so multiple supporting excerpts from one chunk render independently.
+The public saved-conversation follow-up about current client counts also returned
+a supported answer in 3.084 s. Additional UI checks confirmed that both Send and
+Enter preserve a rejected 4,001-character draft and make no query request. Astryx
+clears the composer after submission, so rejected drafts and their error are
+restored after that update.
 
 ## Limits
 

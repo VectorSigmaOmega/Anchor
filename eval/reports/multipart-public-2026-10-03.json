@@ -1,0 +1,169 @@
+{
+  "tested_at": "2026-10-03",
+  "site": "https://anchor.abhinash.dev",
+  "release_sha": "497fef0e9aa5d855a5203f6802cf096cd51466b0",
+  "question": "Using the SEBI Master Circulars for Investment Advisers and Research Analysts dated 6 February 2026, assess this plan for a partnership firm registered as both an IA and an RA. Its peak client counts in the previous financial year were 280 advisory clients and 425 research clients; it currently has only 120 clients in each business. For an ordinary, non-accredited individual client family, it proposes fixed annual fees of Rs 160,000 for investment advice and Rs 160,000 for research, excluding statutory charges. It wants to collect 18 months of fees upfront and retain three months of fees if either contract is terminated early. It also wants to operate advisory and research as one undifferentiated service. Explain: (1) the dual-registration compliance and segregation requirements; (2) the annual fee ceiling and maximum advance period for each service; (3) how refunds and breakage fees differ between IA and RA; (4) the deposit required for each registration, the lien beneficiary, which client counts determine the deposit, and the deadline for updating it; and (5) which fee rules change for corporate clients or accredited investors. Cite both circulars and distinguish their rules.",
+  "entered_characters": 1196,
+  "http_status": 200,
+  "response": {
+    "request_id": "d1780d2c-2305-49db-a679-34a6e3b3c6ec",
+    "status": "answered",
+    "answer": "For dual-registration compliance, an individual or partnership firm registered as an investment adviser or research analyst may hold both registrations, provided it complies with the rules, regulations, and reporting requirements under each set of regulations (IA Regulations and RA Regulations) separately [1][2]. Furthermore, the IA/RA must provide an undertaking stating that it will maintain an arms-length relationship between its activity as an IA and an RA, and ensure that its investment advisory services and research services are clearly segregated from each other [1][2]. The firm's proposal to operate advisory and research as one undifferentiated service is not permitted because the regulations explicitly require the two services to be clearly segregated [1][2]. Regarding annual fee ceilings and advance periods, for investment advisory services under the Master Circular for Investment Advisers, the fixed annual fee limit is Rs 1,51,000 per annum per family of client [3][4], and advance fees cannot exceed a period of one year [5][3]. For research services under the Master Circular for Research Analysts, the fee limit is also a maximum of Rs 1,51,000 per annum per family of client for individuals and HUF clients [6][7]. Regarding the advance period for research services, the excerpts contain an inconsistency: one passage states that advance fees shall not exceed the period stipulated by SEBI, presently one quarter [8], while another passage states that advance fees shall not exceed a period of one year [9]. The excerpts do not establish which provision takes precedence, so the inconsistency remains unresolved between the one-quarter limit [8] and the one-year limit [9]. For the proposed ordinary client, the proposed annual fee of Rs 160,000 for IA exceeds the cited limit of Rs 1,51,000 [3][4], and is therefore not permitted; similarly, the proposed annual fee of Rs 160,000 for RA exceeds the cited limit of Rs 1,51,000 [6][7], and is not permitted. Collecting 18 months of fees upfront exceeds both the IA one-year limit [5][3] and both RA advance period versions (one quarter [8] or one year [9]), and is therefore not permitted for either role. Regarding refunds and breakage fees upon early termination, for IA services, the client is entitled to a refund of proportionate fees for the unexpired period, and the IA is permitted to retain a maximum breakage fee not greater than one-quarter fee [5][10]. For RA services, the client is entitled to a refund of proportionate fees for the unexpired period, but the RA is explicitly prohibited from charging any breakage fee [9]. Therefore, the proposal to retain three months of fees as a breakage fee is permitted for IA (as it does not exceed one-quarter fee) [5][10], but is not permitted for RA because RAs cannot charge any breakage fee [9]. Regarding deposit requirements, the deposit for IA is maintained in the form of units of liquid mutual fund, an overnight mutual fund, or a deposit with a scheduled bank, and must be marked as a lien in favor of IAASB [11]. The deposit for RA is maintained in the same financial instruments and must be marked as a lien in favor of RAASB [12][13]. A lien is not a payment to the supervisory body. The deposit amounts are determined based on the maximum number of clients on any day of the previous financial year [11][13]. Using the historical maximum counts from the scenario (280 advisory clients and 425 research clients), the required deposit for IA is Rs 2 lakhs (for the 151 to 300 client bracket) [14][11], and the required deposit for RA is Rs 5 lakhs (for the 301 to 1,000 client bracket) [12][15]. The deadline for updating the deposit amount for any change in the applicable amount based on the previous year's maximum clients is latest by April 30th of the subsequent financial year [11][12]. Finally, regarding corporate clients (non-individual clients) and accredited investors, the fee-related provisions—including the fixed fee limit, modes of payment, refund rules, advance fee limits, and breakage fees—are not applicable; instead, fee-related terms and conditions for non-individual clients and accredited investors are governed through bilaterally negotiated contractual terms [14][9][3].",
+    "refusal_reason": null,
+    "citations": [
+      {
+        "chunk_id": "sebi_research_analysts_2026::chunk_039",
+        "doc_id": "sebi_research_analysts_2026",
+        "doc_title": "Master Circular for Research Analysts",
+        "regulator": "SEBI",
+        "section_title": "1.3 Registration both as Investment Adviser and Research analyst:",
+        "page": 8,
+        "source_url": "https://www.sebi.gov.in/sebi_data/attachdocs/feb-2026/1770375507051.pdf",
+        "quote": "In terms of the proviso to Regulation 9 of the RA Regulations, an individual or partnership firm registered as an investment adviser may be granted certificate of registration as a research analyst, subject to such terms and conditions as the SEBI may deem fit and appropriate. Accordingly, these terms and conditions are as under: a. An investment adviser, who is an individual or partner-ship firm, registered under the SEBI (Investment Advisers) Regulations, 2013 (IA Regulations), may be considered eligible for grant of certificate of registration as RA under the RA Regulations provided that it shall comply with the rules/regulations/reporting requirements under each of these regulations viz. IA Regulations and RA Regulations separately. b. Such IA/RA shall provide an undertaking stating that it shall maintain arms- length relationship between its activity as IA and RA and shall ensure that its investment advisory services and research services are clearly segregated from each other."
+      },
+      {
+        "chunk_id": "sebi_investment_advisers_2026::chunk_042",
+        "doc_id": "sebi_investment_advisers_2026",
+        "doc_title": "Master Circular for Investment Advisers",
+        "regulator": "SEBI",
+        "section_title": "7 of the IA Regulations, effective from December 16, 2024. Further,",
+        "page": 14,
+        "source_url": "https://www.sebi.gov.in/sebi_data/attachdocs/feb-2026/1770375291405.pdf",
+        "quote": "as a research analyst may be granted certificate of registration as an investment adviser, subject to such terms and conditions as the SEBI may deem fit and appropriate. Accordingly, these terms and conditions are as under: (a) A research analyst, who is an Individual or partner-ship firm, registered under the SEBI (Research Analysts) Regulations, 2014 (RA Regulations), may be considered eligible for grant of certificate of registration as IA under the IA Regulations provided that it shall comply with the rules/regulations/reporting requirements under each of these regulations viz. IA Regulations and RA Regulations separately. (b) Such IA/RA shall provide an undertaking stating that it shall maintain arms-length relationship between its activity as IA and RA and shall ensure that its investment advisory services and research services are clearly segregated from each other. (viii) Registration as part time Investment Adviser (a) In terms of Regulation 2(1)(qa) read with regulation"
+      },
+      {
+        "chunk_id": "sebi_investment_advisers_2026::chunk_197",
+        "doc_id": "sebi_investment_advisers_2026",
+        "doc_title": "Master Circular for Investment Advisers",
+        "regulator": "SEBI",
+        "section_title": "Note:",
+        "page": 66,
+        "source_url": "https://www.sebi.gov.in/sebi_data/attachdocs/feb-2026/1770375291405.pdf",
+        "quote": "(i) The current fee limit under Fixed Fee mode is Rs 1,51,000/- per annum per family of client. Under Assets under Advice (AUA) mode, maximum fee limit is 2.5 per cent of AUA per annum per family of client. (ii) The IA may change the fee mode at any time with the client’s consent; however, the maximum fee limit in such cases shall be higher of fee limit under the fixed fee mode or 2.5 per cent of AUA per annum per family of client. (iii) The fee limits do not include statutory charges. (iv) The fee limits apply only for investment advice related to securities under purview of SEBI. (v) The fee limits do not apply to a non-individual client / accredited investor. 7. IA may charge fees in advance if agreed by the client. Such advance shall not exceed the period stipulated by SEBI; presently it is maximum one year. In case of premature termination of the IA services by the client or the IA, the client shall be entitled to seek refund of proportionate fees only for unexpired period."
+      },
+      {
+        "chunk_id": "sebi_investment_advisers_2026::chunk_037",
+        "doc_id": "sebi_investment_advisers_2026",
+        "doc_title": "Master Circular for Investment Advisers",
+        "regulator": "SEBI",
+        "section_title": "2.5 per cent of AUA per annum per family of client across all",
+        "page": 9,
+        "source_url": "https://www.sebi.gov.in/sebi_data/attachdocs/feb-2026/1770375291405.pdf",
+        "quote": "services offered by IA, and (ii) Fixed fee mode, which is subject to a specified fee limit (earlier limit ₹1,25,000) per annum per family of client across all services offered by IA. (b) The maximum fee that may be charged by the IA under the fixed fee mode now stands revised and shall not exceed ₹1,51,000 per annum per family of client. The fee limit shall be revised and announced by IAASB once in three years based on the Cost Inflation Index (CII) after due consultation with SEBI. (c) In terms of the earlier provisions, IA could charge fees from a client under any one mode, i.e., Assets under Advice (AUA) mode or fixed fee mode on an annual basis. Change of mode, if any, could be effected only after twelve months of on-boarding/last change of mode. In order to provide more flexibility in charging of fees, IAs have now been allowed to change the fee mode for a client at any time, without restriction on the minimum period between two fee mode changes. The maximum fee that can be"
+      },
+      {
+        "chunk_id": "sebi_investment_advisers_2026::chunk_038",
+        "doc_id": "sebi_investment_advisers_2026",
+        "doc_title": "Master Circular for Investment Advisers",
+        "regulator": "SEBI",
+        "section_title": "2.5 per cent of AUA per annum per family of client across all",
+        "page": 10,
+        "source_url": "https://www.sebi.gov.in/sebi_data/attachdocs/feb-2026/1770375291405.pdf",
+        "quote": "the IA Regulations, Investment advice related to securities under purview of SEBI shall only fall under the purview of IA Regulations. As provided under Regulation 2(1) (ac) of IA Regulations, for the purpose of charging fee under AUA mode, AUA shall mean the aggregate net asset value of securities under the purview of SEBI. Accordingly, it is clarified that the limits on fee chargeable to clients by IAs shall be applicable only in respect of investment advice related to securities under purview of SEBI. (h) If agreed by the client, IAs may charge fees in advance, however, such advance shall not exceed fees for a period of one year.9 In the event of pre-mature termination of the IA services in terms of agreement, the client shall be refunded the fees for unexpired 8 Reference: Circular No. HO/38/12/11(1)2025-MIRSD-POD/ I/71/2025 dated October 30, 2025 9 Reference: Circular No. SEBI/HO/MIRSD/ MIRSD-PoD/P/CIR/2025/48 dated April 02, 2025 Page 10 of 99 No. of clients | Deposit Up to 150"
+      },
+      {
+        "chunk_id": "sebi_research_analysts_2026::chunk_199",
+        "doc_id": "sebi_research_analysts_2026",
+        "doc_title": "Master Circular for Research Analysts",
+        "regulator": "SEBI",
+        "section_title": "12. Most Important Terms and Conditions (MITC): RA shall also disclose MITC as",
+        "page": 59,
+        "source_url": "https://www.sebi.gov.in/sebi_data/attachdocs/feb-2026/1770375507051.pdf",
+        "quote": "specified below to their clients. (MITC have been standardized by Industry Standards Forum (ISF) in consultation with SEBI and RAASB). Page 59 of 107 i. These terms and conditions, and consent thereon are for the research services provided by the Research Analyst (RA) and RA cannot execute/carry out any trade (purchase/sell transaction) on behalf of, the client. Thus, the clients are advised not to permit RA to execute any trade on their behalf. ii. The fee charged by RA to the client will be subject to the maximum of amount prescribed by SEBI/ Research Analyst Administration and Supervisory Body (RAASB) from time to time (applicable only for Individual and HUF Clients). a. The current fee limit is Rs 1,51,000/- per annum per family of client for all research services of the RA. b. The fee limit does not include statutory charges. c. The fee limits do not apply to a non-individual client / accredited investor. iii. RA may charge fees in advance if agreed by the client. Such advance"
+      },
+      {
+        "chunk_id": "sebi_research_analysts_2026::chunk_048",
+        "doc_id": "sebi_research_analysts_2026",
+        "doc_title": "Master Circular for Research Analysts",
+        "regulator": "SEBI",
+        "section_title": "1.9 Fees chargeable to clients by RAs:",
+        "page": 13,
+        "source_url": "https://www.sebi.gov.in/sebi_data/attachdocs/feb-2026/1770375507051.pdf",
+        "quote": "Regulation 15A of RA Regulations provide that RA shall be entitled to charge fees for providing research services from client including an accredited investor in the manner as specified by SEBI. Accordingly, - a. RAs may charge fees, subject to ceiling as may be specified by SEBI and shall ensure that fee charged to client is fair and reasonable. b. RAs shall charge a maximum of ₹1,51,000 per annum per family in case of their clients who are individuals and Hindu Undivided Family(HUF). The fee limit shall be revised and announced by RAASB once in three years based on the Cost Inflation Index (CII) after due consultation with SEBI. c. The fee limit does not include statutory charges. d. The fee related provisions3 such as fee limit, modes of payment of fees, refund of fees, advance fee, breakage fees shall only be applicable in case"
+      },
+      {
+        "chunk_id": "sebi_research_analysts_2026::chunk_199",
+        "doc_id": "sebi_research_analysts_2026",
+        "doc_title": "Master Circular for Research Analysts",
+        "regulator": "SEBI",
+        "section_title": "12. Most Important Terms and Conditions (MITC): RA shall also disclose MITC as",
+        "page": 59,
+        "source_url": "https://www.sebi.gov.in/sebi_data/attachdocs/feb-2026/1770375507051.pdf",
+        "quote": "fee limit does not include statutory charges. c. The fee limits do not apply to a non-individual client / accredited investor. iii. RA may charge fees in advance if agreed by the client. Such advance shall not exceed the period stipulated by SEBI; presently it is one quarter. In case of pre- mature termination of the RA services by either the client or the RA, the client shall be entitled to seek refund of proportionate fees only for unexpired period. iv. Fees to RA may be paid by the client through any of the specified modes like cheque, online bank transfer, UPI, etc. Cash payment is not allowed. Optionally the client can make payments through Centralized Fee Collection Mechanism (CeFCoM) managed by BSE Limited (i.e. currently recognized RAASB). v. The RA is required to abide by the applicable regulations/ circulars/ directions specified by SEBI and RAASB from time to time in relation to disclosure and mitigation of any actual or potential conflict of interest. The RA will endeavor"
+      },
+      {
+        "chunk_id": "sebi_research_analysts_2026::chunk_049",
+        "doc_id": "sebi_research_analysts_2026",
+        "doc_title": "Master Circular for Research Analysts",
+        "regulator": "SEBI",
+        "section_title": "3 Reference: Circular No. SEBI/HO/MIRSD/MIRSD-PoD/P/CIR/2025/48 dated April 02, 2025",
+        "page": 13,
+        "source_url": "https://www.sebi.gov.in/sebi_data/attachdocs/feb-2026/1770375507051.pdf",
+        "quote": "Page 13 of 107 of their individual and HUF clients (provided these clients are not accredited investors). These provisions shall not be applicable in case of non-individual clients, accredited investors, and in case of institutional investors seeking recommendation of proxy adviser. e. In case of non-individual clients, accredited investors, and in case of institutional investors seeking recommendation of proxy adviser, fee related terms and conditions shall be governed through bilaterally negotiated contractual terms. f. If agreed by the client, RA may charge fees in advance. However, such advance shall not exceed fees for a period of one year. g. In the event of pre-mature termination of RA services in terms of the agreed terms and conditions, the client shall be refunded proportionate fees for unexpired period. RA shall not charge any breakage fee. h. The terms and conditions to be disclosed by RA to the client shall also include fee limits, agreed fees for research services and"
+      },
+      {
+        "chunk_id": "sebi_investment_advisers_2026::chunk_197",
+        "doc_id": "sebi_investment_advisers_2026",
+        "doc_title": "Master Circular for Investment Advisers",
+        "regulator": "SEBI",
+        "section_title": "Note:",
+        "page": 66,
+        "source_url": "https://www.sebi.gov.in/sebi_data/attachdocs/feb-2026/1770375291405.pdf",
+        "quote": "it is maximum one year. In case of premature termination of the IA services by the client or the IA, the client shall be entitled to seek refund of proportionate fees only for unexpired period. However, IA is entitled to retain a maximum breakage fee of not greater than one-quarter fee. 8. Fees to IA may be paid by the client through any of the specified modes like cheque, online bank transfer, UPI, etc. Cash payment is not allowed. Optionally the client can make payments through Centralized Fee Collection Mechanism (CeFCoM), managed by BSE Limited (i.e. currently recognized IAASB). 9. The IA is expected to know the client’s financial details for providing services. Hence, the client is required to share the financial information (e.g. income, existing investments, liabilities, etc.) with the IA. 10. The IA is required to carry out the client’s risk profiling and suitability analysis before providing services and thereafter on an ongoing basis. The services provided will be in line"
+      },
+      {
+        "chunk_id": "sebi_investment_advisers_2026::chunk_038",
+        "doc_id": "sebi_investment_advisers_2026",
+        "doc_title": "Master Circular for Investment Advisers",
+        "regulator": "SEBI",
+        "section_title": "2.5 per cent of AUA per annum per family of client across all",
+        "page": 10,
+        "source_url": "https://www.sebi.gov.in/sebi_data/attachdocs/feb-2026/1770375291405.pdf",
+        "quote": "clients and accredited investors, fee related terms and conditions shall be governed through bilaterally negotiated contractual terms. (iv) Deposit requirement10 (a) As per Regulation 8 of the IA Regulations, an investment adviser shall maintain a deposit of such sum, as specified by the Board from time to time. In this regard, it is specified that an IA shall maintain the deposit in the form of units of liquid mutual fund or an overnight mutual fund or as a deposit maintained with a scheduled bank. Such deposit shall be marked as lien in favour of IAASB. The deposit requirements shall be based on the maximum number of clients of IA on any day of the previous financial year, as under: No. of clients Deposit Up to 150 clients ₹ 1 lakh"
+      },
+      {
+        "chunk_id": "sebi_research_analysts_2026::chunk_037",
+        "doc_id": "sebi_research_analysts_2026",
+        "doc_title": "Master Circular for Research Analysts",
+        "regulator": "SEBI",
+        "section_title": "301 to 1,000 clients ₹ 5 lakhs",
+        "page": 7,
+        "source_url": "https://www.sebi.gov.in/sebi_data/attachdocs/feb-2026/1770375507051.pdf",
+        "quote": "1,001 and above clients ₹ 10 lakhs b. The deposit shall be marked as lien in favour of Research Analyst Administration and Supervisory body (RAASB), in the manner and form as may be specified by RAASB. c. The deposit amount may be revised for any change in applicable amount of deposit, based on the maximum number of clients in the previous financial year, latest by 30th April of the subsequent financial year. d. RAASB shall put in place necessary systems and procedures for implementation of these provisions and bring the same to the notice of RAs. e. The deposit requirements shall be reviewed by SEBI from time to time."
+      },
+      {
+        "chunk_id": "sebi_research_analysts_2026::chunk_036",
+        "doc_id": "sebi_research_analysts_2026",
+        "doc_title": "Master Circular for Research Analysts",
+        "regulator": "SEBI",
+        "section_title": "1.2 Deposit requirement2:",
+        "page": 7,
+        "source_url": "https://www.sebi.gov.in/sebi_data/attachdocs/feb-2026/1770375507051.pdf",
+        "quote": "a. As per Regulation 8 of the RA Regulations, a research analyst shall maintain a deposit of such sum, as specified by SEBI from time to time. In this regard, it is specified that an RA shall maintain the deposit in the form of units of liquid mutual fund or an overnight mutual fund or as a deposit maintained with a scheduled bank. The deposit requirements shall be based on the maximum number of clients of RA on any day of the previous financial year, as under: No. of clients Deposit Up to 150 clients ₹ 1 lakh"
+      },
+      {
+        "chunk_id": "sebi_investment_advisers_2026::chunk_038",
+        "doc_id": "sebi_investment_advisers_2026",
+        "doc_title": "Master Circular for Investment Advisers",
+        "regulator": "SEBI",
+        "section_title": "2.5 per cent of AUA per annum per family of client across all",
+        "page": 10,
+        "source_url": "https://www.sebi.gov.in/sebi_data/attachdocs/feb-2026/1770375291405.pdf",
+        "quote": "HO/38/12/11(1)2025-MIRSD-POD/ I/71/2025 dated October 30, 2025 9 Reference: Circular No. SEBI/HO/MIRSD/ MIRSD-PoD/P/CIR/2025/48 dated April 02, 2025 Page 10 of 99 No. of clients | Deposit Up to 150 clients | ₹ 1 lakh 151 to 300 clients | ₹ 2 lakh 301 to 1,000 clients | ₹ 5 lakhs 1,001 and above clients | ₹ 10 lakhs period. However, IA may retain a maximum breakage fee of not greater than one-quarter fee. (i) The fee related provisions such as fee limit, modes of payment of fees, refund of fees, advance fee, breakage fees shall only be applicable in case of individual and Hindu Undivided Family (HUF) clients (provided these clients are not accredited investors) of IAs. These provisions shall not be applicable in case of non- individual clients and accredited investors. In case of non- individual clients and accredited investors, fee related terms and conditions shall be governed through bilaterally negotiated contractual terms. (iv) Deposit requirement10 (a) As per Regulation 8 of the"
+      },
+      {
+        "chunk_id": "sebi_research_analysts_2026::chunk_035",
+        "doc_id": "sebi_research_analysts_2026",
+        "doc_title": "Master Circular for Research Analysts",
+        "regulator": "SEBI",
+        "section_title": "1 Reference: Circular No. SEBI/HO/MIRSD/ MIRSD-PoD-1/P/CIR/2025/004 dated January 08, 2025",
+        "page": 6,
+        "source_url": "https://www.sebi.gov.in/sebi_data/attachdocs/feb-2026/1770375507051.pdf",
+        "quote": "Page 6 of 107 No. of clients | Deposit Up to 150 clients | ₹ 1 lakh 151 to 300 clients | ₹ 2 lakh 301 to 1,000 clients | ₹ 5 lakhs 1,001 and above clients | ₹ 10 lakhs NISM or from any other organization or institution accredited by NISM, within three years from the date of registration certificate."
+      }
+    ],
+    "disclaimer": "Demo only. Not legal or financial advice.",
+    "latency_ms": 8068
+  },
+  "required_fact_failures": []
+}
