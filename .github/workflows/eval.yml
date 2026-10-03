@@ -57,8 +57,14 @@ jobs:
       - name: Run full eval
         run: python eval/run.py --write-docs
 
+      - name: Run reviewed answer checks
+        run: python -m scripts.evaluate_quality --output eval/quality-live.jsonl
+
       - name: Upload eval report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: anchor-eval
-          path: docs/EVAL.md
+          path: |
+            docs/EVAL.md
+            eval/quality-live.jsonl
