@@ -31,6 +31,7 @@ server {
     add_header Referrer-Policy "same-origin" always;
 
     location = / {
+        expires -1;
         try_files /index.html =404;
     }
 
@@ -80,6 +81,7 @@ server {
     }
 
     location / {
+        expires -1;
         try_files $uri $uri.html $uri/ /index.html;
     }
 }

@@ -10,7 +10,7 @@ from anchor.config import get_settings
 from anchor.db.pool import Database
 from anchor.db.repository import AnchorRepository
 from anchor.pipeline.service import QueryService
-from anchor.providers.gemini import GeminiEmbeddingProvider, GeminiGenerationProvider
+from anchor.providers.factory import build_embedding_provider, build_generation_provider
 from anchor.providers.rerank import CohereRerankProvider
 from anchor.schemas import Citation, EvalRow, QueryExecutionResult, QueryResponse
 from anchor.services.metrics import Metrics
@@ -95,11 +95,12 @@ async def build_live_eval_service() -> LiveEvalService:
     database = Database(settings)
     await database.open()
     repository = AnchorRepository(database, settings)
+    await repository.validate_embedding_profile()
     query_service = QueryService(
         settings=settings,
         repository=repository,
-        embedding_provider=GeminiEmbeddingProvider(settings),
-        generation_provider=GeminiGenerationProvider(settings),
+        embedding_provider=build_embedding_provider(settings),
+        generation_provider=build_generation_provider(settings),
         rerank_provider=CohereRerankProvider(settings),
         tracer=Tracer(settings),
         metrics=Metrics(f"{settings.metrics_namespace}_eval"),

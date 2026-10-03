@@ -78,3 +78,37 @@ python eval/run.py --write-docs
 ```
 
 The full eval must run against the deployed corpus or an equivalent populated database with real provider credentials.
+
+## Provider selection and embedding migration
+
+GitHub repository variables `GENERATION_PROVIDER`, `EMBEDDING_PROVIDER`,
+`GENERATION_MODEL` and `EMBEDDING_MODEL` control deployment and scheduled eval.
+Defaults remain Gemini 3.1 Flash-Lite and Gemini Embedding 2. OpenAI requires an
+`OPENAI_API_KEY` repository secret. The cost-oriented OpenAI defaults are
+`gpt-4.1-mini` and `text-embedding-3-small`. Generation can be switched separately
+from embeddings.
+
+When changing embeddings, keep dimension 768 and dispatch deployment with
+`run_reembed=true`. Deployment saves a public-corpus backup, embeds the existing
+indexed passages in a temporary table, and atomically updates all vectors and
+their model profile. A failed batch rolls back the vector changes. Plain
+ingestion will not convert unchanged documents to a different embedding model;
+runtime profile checks reject that mismatch.
+
+The re-embedding command can also be run directly with the target provider
+environment loaded:
+
+```bash
+python -m anchor.ingest.reembed
+```
+
+Run `python -m scripts.benchmark_answers` against the restored or deployed
+corpus to inspect substantive answers. This is distinct from the older
+document-lookup golden set and fixture smoke checks.
+
+## Browser cache during releases
+
+HTML and static route payloads use `Cache-Control: no-cache` so navigation
+revalidates them. Hashed `/_next/` files retain their asset cache and are copied
+without deleting previous hashes. This keeps already-open pages and previously
+cached HTML functional during and after deployment.

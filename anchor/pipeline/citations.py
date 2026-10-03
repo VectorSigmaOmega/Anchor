@@ -2,14 +2,21 @@ from __future__ import annotations
 
 import re
 
+from anchor.pipeline.refusal import significant_terms
 from anchor.schemas import Citation, ModelQueryResponse, RetrievedChunk
 
 
-def render_quote(text: str, max_chars: int = 800) -> str:
+def render_quote(text: str, max_chars: int = 240, *, focus: str = "") -> str:
     compact = re.sub(r"\s+", " ", text).strip()
     if len(compact) <= max_chars:
         return compact
-    return compact[: max_chars - 1].rstrip() + "…"
+    start = 0
+    if focus:
+        keywords = significant_terms(focus)
+        candidates = [0, *(match.end() for match in re.finditer(r"[.;:]\s+", compact))]
+        start = max(candidates, key=lambda offset: len(keywords & significant_terms(compact[offset : offset + max_chars - 2])))
+    excerpt = compact[start : start + max_chars - 2].rstrip()
+    return ("…" if start else "") + excerpt + ("…" if start + max_chars - 2 < len(compact) else "")
 
 
 def citation_quote_text(chunk: RetrievedChunk) -> str:

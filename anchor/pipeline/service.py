@@ -299,8 +299,8 @@ class QueryService:
         )
         fused = fuse_ranked_chunk_lists(
             [
-                *[(chunks, "lexical_score") for chunks in lexical_results],
-                *[(chunks, "dense_score") for chunks in dense_results],
+                *[(self._content_passages(chunks), "lexical_score") for chunks in lexical_results],
+                *[(self._content_passages(chunks), "dense_score") for chunks in dense_results],
             ],
             constant=self.settings.rrf_constant,
         )
@@ -318,6 +318,13 @@ class QueryService:
             }
         )
         return fused
+
+    @staticmethod
+    def _content_passages(chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
+        return [chunk for chunk in chunks if not re.search(
+            r"(?:^| > )(?:contents|table of contents|list of abbreviations)(?: > |$)",
+            chunk.section_path, re.IGNORECASE,
+        )]
 
     async def _dense_search(self, question: str, trace: NullTrace) -> list[RetrievedChunk]:
         span = trace.span("dense_search", input={"question": question})

@@ -8,6 +8,22 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: anchor_test
+          POSTGRES_USER: anchor
+          POSTGRES_PASSWORD: anchor
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U anchor -d anchor_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      ANCHOR_TEST_DATABASE_URL: postgresql://anchor:anchor@localhost:5432/anchor_test
 
     steps:
       - uses: actions/checkout@v4

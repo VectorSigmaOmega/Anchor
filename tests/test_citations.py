@@ -1,6 +1,6 @@
 import pytest
 
-from anchor.pipeline.citations import validate_and_hydrate_citations, verified_quote
+from anchor.pipeline.citations import render_quote, validate_and_hydrate_citations, verified_quote
 from anchor.schemas import ModelCitation, ModelQueryResponse, RetrievedChunk
 
 
@@ -96,3 +96,22 @@ def test_abridged_quote_recovers_the_actual_intervening_source_conditions() -> N
     assert verified_quote(f"{first} ... {last}", source) == source
     assert verified_quote(f"{last} ... {first}", source) is None
     assert verified_quote("Banks ... waive", source) is None
+def test_validation_checks_citations_beyond_the_display_limit() -> None:
+    response = ModelQueryResponse(status="answered", answer="Supported answer.",
+                                  citations=[ModelCitation(chunk_id="chunk-001", quote=context_chunk().text),
+                                             ModelCitation(chunk_id="invented", quote="invented")])
+    assert validate_and_hydrate_citations(response, [context_chunk()], max_rendered=1) == (False, [])
+
+
+@pytest.mark.parametrize("answer,reason", [("", None), ("   ", None), ("Supported answer.", "insufficient_support")])
+def test_answered_output_cannot_be_empty_or_have_a_refusal_reason(answer, reason) -> None:
+    response = ModelQueryResponse(status="answered", answer=answer, refusal_reason=reason,
+                                  citations=[ModelCitation(chunk_id="chunk-001", quote=context_chunk().text)])
+    assert validate_and_hydrate_citations(response, [context_chunk()], max_rendered=4) == (False, [])
+
+
+def test_quote_prefers_the_supporting_clause_over_a_long_introduction() -> None:
+    text = "General introductory material. " * 20 + "Annual credits must not exceed one lakh. Monthly withdrawals are limited."
+    quote = render_quote(text, max_chars=100, focus="Annual credits must not exceed one lakh.")
+    assert "Annual credits must not exceed one lakh." in quote
+    assert len(quote) <= 100

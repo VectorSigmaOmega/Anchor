@@ -1,8 +1,8 @@
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     environment: str = "development"
     log_level: str = "INFO"
     database_url: str
+    generation_provider: Literal["gemini", "openai"] = "gemini"
+    embedding_provider: Literal["gemini", "openai"] = "gemini"
+    openai_api_key: str = ""
+    openai_api_base_url: str = "https://api.openai.com/v1"
+    openai_reasoning_effort: str | None = None
     gemini_api_key: str = ""
     gemini_api_base_url: str = "https://generativelanguage.googleapis.com/v1beta/models"
     generation_model: str = "gemini-3.1-flash-lite"
@@ -55,15 +60,34 @@ class Settings(BaseSettings):
     corpus_manifest_path: Path = Path("corpus/manifest.yaml")
     raw_corpus_dir: Path = Path("corpus/raw")
 
+    @model_validator(mode="before")
+    @classmethod
+    def provider_model_defaults(cls, values: Any) -> Any:
+        if isinstance(values, dict):
+            if not values.get("generation_model"):
+                values["generation_model"] = "gpt-4.1-mini" if values.get("generation_provider") == "openai" else "gemini-3.1-flash-lite"
+            if not values.get("embedding_model"):
+                values["embedding_model"] = (
+                    "text-embedding-3-small" if values.get("embedding_provider") == "openai" else "gemini-embedding-2"
+                )
+        return values
+
     def validate_ingest_runtime(self) -> None:
-        self._require("GEMINI_API_KEY", self.gemini_api_key)
+        self._validate_provider_key(self.embedding_provider)
 
     def validate_query_runtime(self) -> None:
-        self._require("GEMINI_API_KEY", self.gemini_api_key)
+        self._validate_provider_key(self.embedding_provider)
+        self._validate_provider_key(self.generation_provider)
         self._require("COHERE_API_KEY", self.cohere_api_key)
         if self.environment == "production":
             self._require("LANGFUSE_PUBLIC_KEY", self.langfuse_public_key)
             self._require("LANGFUSE_SECRET_KEY", self.langfuse_secret_key)
+
+    def _validate_provider_key(self, provider: str) -> None:
+        if provider == "openai":
+            self._require("OPENAI_API_KEY", self.openai_api_key)
+        else:
+            self._require("GEMINI_API_KEY", self.gemini_api_key)
 
     @staticmethod
     def _require(name: str, value: str) -> None:

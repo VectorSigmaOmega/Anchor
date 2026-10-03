@@ -9,6 +9,8 @@ from psycopg.types.json import Jsonb
 
 from anchor.config import Settings
 from anchor.db.pool import Database
+from anchor.pipeline.refusal import significant_terms
+from anchor.providers.gemini import ProviderError
 from anchor.schemas import ChatConversation, ChatMessage, ChunkRecord, ConversationTurn, DocumentRecord, QueryResponse, RetrievedChunk
 from anchor.services.chat_sessions import chat_title_from_question
 
@@ -41,6 +43,27 @@ class AnchorRepository:
     def __init__(self, db: Database, settings: Settings) -> None:
         self.db = db
         self.settings = settings
+
+    def _check_embedding_profile(self, profile: dict | None) -> None:
+        if profile is None:
+            return
+        expected = (self.settings.embedding_provider, self.settings.embedding_model, self.settings.embedding_dimension)
+        actual = (profile["provider"], profile["model"], profile["dimension"])
+        if actual != expected:
+            raise ProviderError(
+                "The corpus uses a different embedding model. Run python -m anchor.ingest.reembed before switching query embeddings.",
+                provider="embedding_index",
+            )
+
+    async def validate_embedding_profile(self) -> None:
+        async with self.db.connection() as conn, conn.cursor() as cur:
+            await cur.execute("SELECT provider, model, dimension FROM corpus_embedding_profile WHERE singleton = TRUE")
+            profile = await cur.fetchone()
+            if profile is None:
+                await cur.execute("SELECT EXISTS (SELECT 1 FROM chunks) AS populated")
+                if (await cur.fetchone())["populated"]:
+                    raise ProviderError("The populated corpus has no embedding profile", provider="embedding_index")
+            self._check_embedding_profile(profile)
 
     async def healthcheck(self) -> bool:
         async with self.db.connection() as conn, conn.cursor() as cur:
@@ -125,8 +148,19 @@ class AnchorRepository:
         chunks: list[ChunkRecord],
         embeddings: list[list[float]],
     ) -> None:
+        await self.validate_embedding_profile()
         async with self.db.connection() as conn:
             async with conn.cursor() as cur:
+                await cur.execute("SELECT pg_advisory_xact_lock(hashtext('anchor_embedding_maintenance'))")
+                await cur.execute(
+                    """
+                    INSERT INTO corpus_embedding_profile (singleton, provider, model, dimension)
+                    VALUES (TRUE, %s, %s, %s) ON CONFLICT (singleton) DO NOTHING
+                    """,
+                    (self.settings.embedding_provider, self.settings.embedding_model, self.settings.embedding_dimension),
+                )
+                await cur.execute("SELECT provider, model, dimension FROM corpus_embedding_profile WHERE singleton = TRUE FOR UPDATE")
+                self._check_embedding_profile(await cur.fetchone())
                 await cur.execute(
                     """
                     INSERT INTO documents (
@@ -625,6 +659,12 @@ class AnchorRepository:
         return request_count
 
     async def lexical_search(self, question: str, limit: int) -> list[RetrievedChunk]:
+        # Natural-language questions contain words that will not all occur in a
+        # passage. Retrieve a ranked union and let the reranker assess support.
+        terms = significant_terms(question)
+        if not terms:
+            return []
+        search_query = " OR ".join(sorted(terms))
         async with self.db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
                 """
@@ -641,7 +681,7 @@ class AnchorRepository:
                         c.page,
                         c.text,
                         d.source_url,
-                        ts_rank_cd(c.text_tsv, query.q) AS lexical_score
+                        ts_rank_cd(c.text_tsv, query.q, 32) AS lexical_score
                     FROM chunks c
                     JOIN documents d ON d.doc_id = c.doc_id
                     CROSS JOIN query
@@ -650,7 +690,7 @@ class AnchorRepository:
                     ORDER BY lexical_score DESC, c.doc_id, c.chunk_index
                     LIMIT %s
                     """,
-                (question, limit),
+                (search_query, limit),
             )
             rows = await cur.fetchall()
         return [RetrievedChunk(**row) for row in rows]
@@ -658,6 +698,8 @@ class AnchorRepository:
     async def dense_search(self, embedding: list[float], limit: int) -> list[RetrievedChunk]:
         vector = to_pgvector(embedding)
         async with self.db.connection() as conn, conn.cursor() as cur:
+            await cur.execute("SELECT provider, model, dimension FROM corpus_embedding_profile WHERE singleton = TRUE FOR SHARE")
+            self._check_embedding_profile(await cur.fetchone())
             await cur.execute(
                 """
                     SELECT

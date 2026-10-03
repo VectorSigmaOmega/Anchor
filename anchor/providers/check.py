@@ -7,7 +7,8 @@ import asyncio
 import json
 
 from anchor.config import get_settings
-from anchor.providers.gemini import GeminiEmbeddingProvider, GeminiGenerationProvider, ProviderError
+from anchor.providers.factory import build_embedding_provider, build_generation_provider
+from anchor.providers.gemini import ProviderError
 from anchor.providers.rerank import CohereRerankProvider
 from anchor.schemas import RetrievedChunk
 
@@ -15,6 +16,7 @@ from anchor.schemas import RetrievedChunk
 async def check_providers() -> bool:
     settings = get_settings()
     settings.validate_query_runtime()
+    settings._require("COHERE_API_KEY", settings.cohere_api_key)
     chunk = RetrievedChunk(
         chunk_id="provider-check",
         doc_id="provider-check",
@@ -45,10 +47,10 @@ async def check_providers() -> bool:
         return False
 
     results = await asyncio.gather(
-        probe("embedding", GeminiEmbeddingProvider(settings).embed_query("Provider connectivity check")),
+        probe("embedding", build_embedding_provider(settings).embed_query("Provider connectivity check")),
         probe(
             "generation",
-            GeminiGenerationProvider(settings).generate(question="What does this connectivity check confirm?", context_chunks=[chunk]),
+            build_generation_provider(settings).generate(question="What does this connectivity check confirm?", context_chunks=[chunk]),
         ),
         probe("rerank", CohereRerankProvider(settings).rerank("query service availability", [chunk], top_n=1)),
     )

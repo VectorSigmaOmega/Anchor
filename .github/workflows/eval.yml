@@ -26,10 +26,13 @@ jobs:
     env:
       DATABASE_URL: postgresql://anchor:anchor@localhost:5432/anchor
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      GENERATION_MODEL: gemini-3.1-flash-lite
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      GENERATION_PROVIDER: ${{ vars.GENERATION_PROVIDER || 'gemini' }}
+      EMBEDDING_PROVIDER: ${{ vars.EMBEDDING_PROVIDER || 'gemini' }}
+      GENERATION_MODEL: ${{ vars.GENERATION_MODEL || '' }}
       GENERATION_THINKING_LEVEL: minimal
       MAX_COMPLETION_TOKENS: 2048
-      EMBEDDING_MODEL: gemini-embedding-2
+      EMBEDDING_MODEL: ${{ vars.EMBEDDING_MODEL || '' }}
       EMBEDDING_DIMENSION: 768
       EMBEDDING_BATCH_PAUSE_SECONDS: 10
       COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}

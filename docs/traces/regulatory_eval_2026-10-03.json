@@ -1,0 +1,657 @@
+{
+  "run_at": "2026-10-03T03:35:32.067950+00:00",
+  "dataset": "eval/regulatory.jsonl",
+  "fixture_mode": false,
+  "generation_provider": "gemini",
+  "generation_model": "gemini-3.1-flash-lite",
+  "embedding_provider": "gemini",
+  "embedding_model": "gemini-embedding-2",
+  "grading_note": "Outcome, expected-document and phrase checks; inspect saved context to assess factual support.",
+  "summary": {
+    "total": 14,
+    "completed": 14,
+    "passed": 14
+  },
+  "samples": [
+    {
+      "case": {
+        "id": "kyc-small-account-limits",
+        "question": "What are the balance, annual credit and monthly withdrawal limits on an RBI KYC small account?",
+        "expected_status": "answered",
+        "doc_ids": [
+          "rbi_kyc_2016"
+        ],
+        "required_facts": [
+          [
+            "one lakh",
+            "1 lakh",
+            "100000"
+          ],
+          [
+            "ten thousand",
+            "10000"
+          ],
+          [
+            "fifty thousand",
+            "50000"
+          ],
+          [
+            "financial year",
+            "annual"
+          ],
+          [
+            "month"
+          ]
+        ],
+        "reference": "KYC paragraph 23, corpus PDF page 32."
+      },
+      "passed": true,
+      "fact_checks": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "response": {
+        "request_id": "f65a8052-13d1-4814-815a-a3992b803f33",
+        "status": "answered",
+        "answer": "For an RBI KYC small account, the following limits apply: the aggregate of all credits in a financial year must not exceed rupees one lakh, the aggregate of all withdrawals and transfers in a month must not exceed rupees ten thousand, and the balance at any point of time must not exceed rupees fifty thousand [1]. The balance limit does not apply to deposits made through Government grants, welfare benefits, and payments against procurements [1].",
+        "refusal_reason": null,
+        "citations": [
+          {
+            "chunk_id": "rbi_kyc_2016::chunk_050",
+            "doc_id": "rbi_kyc_2016",
+            "doc_title": "Master Direction - Know Your Customer (KYC) Direction, 2016",
+            "regulator": "RBI",
+            "section_title": "23. 73Notwithstanding anything contained in paragraph 16 and as an alternative",
+            "page": 32,
+            "source_url": "https://www.rbi.org.in/commonman/Upload/English/Notification/PDFs/MD18KYCF6E92C82E1E1419D87323E3869BC9F13.pdf",
+            "quote": "the aggregate of all credits in a financial year does not exceed rupees one lakh; ii. the aggregate of all withdrawals and transfers in a month does not exceed rupees ten thousand; and iii. the balance at any point of time does not exceed rupees fifty thousand. 74Provided, that this limit on balance shall not be considered while making deposits through Government grants, welfare benefits and payment against procurements."
+          }
+        ],
+        "disclaimer": "Demo only. Not legal or financial advice.",
+        "latency_ms": 4042
+      }
+    },
+    {
+      "case": {
+        "id": "kyc-small-account-exception",
+        "question": "Does the small-account balance limit apply to government welfare benefits and grants?",
+        "expected_status": "answered",
+        "doc_ids": [
+          "rbi_kyc_2016"
+        ],
+        "required_facts": [
+          [
+            "not apply",
+            "does not",
+            "exempt",
+            "exception"
+          ],
+          [
+            "government"
+          ],
+          [
+            "welfare",
+            "grants"
+          ]
+        ],
+        "reference": "KYC paragraph 23, corpus PDF page 32."
+      },
+      "passed": true,
+      "fact_checks": [
+        true,
+        true,
+        true
+      ],
+      "response": {
+        "request_id": "f58b1df1-acc1-42e9-b03b-76ead1ab0fe8",
+        "status": "answered",
+        "answer": "No, the small-account balance limit of rupees fifty thousand does not apply when making deposits through government grants, welfare benefits, and payments against procurements.",
+        "refusal_reason": null,
+        "citations": [
+          {
+            "chunk_id": "rbi_kyc_2016::chunk_050",
+            "doc_id": "rbi_kyc_2016",
+            "doc_title": "Master Direction - Know Your Customer (KYC) Direction, 2016",
+            "regulator": "RBI",
+            "section_title": "23. 73Notwithstanding anything contained in paragraph 16 and as an alternative",
+            "page": 32,
+            "source_url": "https://www.rbi.org.in/commonman/Upload/English/Notification/PDFs/MD18KYCF6E92C82E1E1419D87323E3869BC9F13.pdf",
+            "quote": "Provided, that this limit on balance shall not be considered while making deposits through Government grants, welfare benefits and payment against procurements."
+          }
+        ],
+        "disclaimer": "Demo only. Not legal or financial advice.",
+        "latency_ms": 3247
+      }
+    },
+    {
+      "case": {
+        "id": "kyc-individual-cdd",
+        "question": "What customer due diligence steps apply to individual customers?",
+        "expected_status": "answered",
+        "doc_ids": [
+          "rbi_kyc_2016"
+        ],
+        "required_facts": [
+          [
+            "officially valid document",
+            "OVD"
+          ],
+          [
+            "PAN",
+            "Permanent Account Number"
+          ],
+          [
+            "Form 60",
+            "Form No. 60"
+          ]
+        ],
+        "reference": "KYC paragraph 16, corpus PDF page 24."
+      },
+      "passed": true,
+      "fact_checks": [
+        true,
+        true,
+        true
+      ],
+      "response": {
+        "request_id": "4a38a776-2372-47c7-99c6-ffe7fe7e59b1",
+        "status": "answered",
+        "answer": "For individual customers, Regulated Entities (REs) must obtain specific identification and verification documents when establishing an account-based relationship. This includes obtaining the Aadhaar number (if the customer is receiving benefits/subsidies or provides it voluntarily), proof of possession of Aadhaar for offline verification, or other Officially Valid Documents (OVDs) or equivalent e-documents containing identity and address details [1]. Additionally, REs must obtain the Permanent Account Number (PAN), an equivalent e-document, or Form No. 60, along with any other documents required by the RE regarding the customer's nature of business and financial status [1]. If an Aadhaar number is submitted, the RE must perform e-KYC authentication; if proof of possession is provided for offline verification, the RE must carry out that verification [1]. For e-documents, the RE must verify the digital signature [1]. Furthermore, REs may use Video-based Customer Identification Process (V-CIP) for new individual customer on-boarding, provided they adhere to specific infrastructure and security standards [2].",
+        "refusal_reason": null,
+        "citations": [
+          {
+            "chunk_id": "rbi_kyc_2016::chunk_042",
+            "doc_id": "rbi_kyc_2016",
+            "doc_title": "Master Direction - Know Your Customer (KYC) Direction, 2016",
+            "regulator": "RBI",
+            "section_title": "16. 55For undertaking CDD, REs shall obtain the following from an individual while",
+            "page": 24,
+            "source_url": "https://www.rbi.org.in/commonman/Upload/English/Notification/PDFs/MD18KYCF6E92C82E1E1419D87323E3869BC9F13.pdf",
+            "quote": "For undertaking CDD, REs shall obtain the following from an individual while establishing an account-based relationship or while dealing with the individual who is a beneficial owner, authorised signatory or the power of attorney holder related to any legal entity: (a) the Aadhaar number where, (i) he is desirous of receiving any benefit or subsidy under any scheme notified under section 7 of the Aadhaar (Targeted Delivery of Financial and Other subsidies, Benefits and Services) Act, 2016 (18 of 2016); or (ii) he decides to submit his Aadhaar number voluntarily to a bank or any RE notified under first proviso to sub-section (1) of section 11A of the PML Act; or (aa) the proof of possession of Aadhaar number where offline verification can be carried out; or (ab) the proof of possession of Aadhaar number where offline verification cannot be carried out or any OVD or the equivalent e-document thereof containing the details of his identity and address; or 56(ac) the KYC Identifier with an explicit consent to download records from CKYCR; and (b) the Permanent Account Number or the equivalent e-document thereof or Form No. 60 as defined in Income-tax Rules, 1962; and (c) such other documents including in respect of the nature of business and financial status of the customer, or the equivalent e-documents thereof as may be required by the RE"
+          },
+          {
+            "chunk_id": "rbi_kyc_2016::chunk_046",
+            "doc_id": "rbi_kyc_2016",
+            "doc_title": "Master Direction - Know Your Customer (KYC) Direction, 2016",
+            "regulator": "RBI",
+            "section_title": "18. 62REs may undertake V-CIP to carry out:",
+            "page": 27,
+            "source_url": "https://www.rbi.org.in/commonman/Upload/English/Notification/PDFs/MD18KYCF6E92C82E1E1419D87323E3869BC9F13.pdf",
+            "quote": "REs may undertake V-CIP to carry out: i) CDD in case of new customer on-boarding for individual customers, proprietor in case of proprietorship firm, authorised signatories and Beneficial Owners (BOs) in case of Legal Entity (LE) customers."
+          }
+        ],
+        "disclaimer": "Demo only. Not legal or financial advice.",
+        "latency_ms": 5243
+      }
+    },
+    {
+      "case": {
+        "id": "ra-client-fee-cap",
+        "question": "What is the annual research analyst fee limit for an individual or HUF client, and does it apply to accredited investors?",
+        "expected_status": "answered",
+        "doc_ids": [
+          "sebi_research_analysts_2026"
+        ],
+        "required_facts": [
+          [
+            "151000",
+            "1.51 lakh",
+            "one lakh fifty one thousand"
+          ],
+          [
+            "family"
+          ],
+          [
+            "accredited"
+          ],
+          [
+            "do not apply",
+            "does not apply",
+            "not applicable",
+            "exempt"
+          ]
+        ],
+        "reference": "Research Analysts MITC, corpus PDF page 59."
+      },
+      "passed": true,
+      "fact_checks": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "response": {
+        "request_id": "b2f7ee22-aca3-4657-9cb8-1c06816a5e04",
+        "status": "answered",
+        "answer": "The annual research analyst fee limit for individual and Hindu Undivided Family (HUF) clients is Rs 1,51,000 per annum per family for all research services [1], [2]. This fee limit does not include statutory charges [1], [2]. These fee-related provisions, including the fee limit, do not apply to accredited investors [1], [3]. For accredited investors, fee-related terms and conditions are governed through bilaterally negotiated contractual terms [3].",
+        "refusal_reason": null,
+        "citations": [
+          {
+            "chunk_id": "sebi_research_analysts_2026::chunk_199",
+            "doc_id": "sebi_research_analysts_2026",
+            "doc_title": "Master Circular for Research Analysts",
+            "regulator": "SEBI",
+            "section_title": "12. Most Important Terms and Conditions (MITC): RA shall also disclose MITC as",
+            "page": 59,
+            "source_url": "https://www.sebi.gov.in/sebi_data/attachdocs/feb-2026/1770375507051.pdf",
+            "quote": "The current fee limit is Rs 1,51,000/- per annum per family of client for all research services of the RA. b. The fee limit does not include statutory charges. c. The fee limits do not apply to a non-individual client / accredited investor."
+          },
+          {
+            "chunk_id": "sebi_research_analysts_2026::chunk_048",
+            "doc_id": "sebi_research_analysts_2026",
+            "doc_title": "Master Circular for Research Analysts",
+            "regulator": "SEBI",
+            "section_title": "1.9 Fees chargeable to clients by RAs:",
+            "page": 13,
+            "source_url": "https://www.sebi.gov.in/sebi_data/attachdocs/feb-2026/1770375507051.pdf",
+            "quote": "RAs shall charge a maximum of \u20b91,51,000 per annum per family in case of their clients who are individuals and Hindu Undivided Family(HUF)."
+          },
+          {
+            "chunk_id": "sebi_research_analysts_2026::chunk_049",
+            "doc_id": "sebi_research_analysts_2026",
+            "doc_title": "Master Circular for Research Analysts",
+            "regulator": "SEBI",
+            "section_title": "3 Reference: Circular No. SEBI/HO/MIRSD/MIRSD-PoD/P/CIR/2025/48 dated April 02, 2025",
+            "page": 13,
+            "source_url": "https://www.sebi.gov.in/sebi_data/attachdocs/feb-2026/1770375507051.pdf",
+            "quote": "These provisions shall not be applicable in case of non-individual clients, accredited investors, and in case of institutional investors seeking recommendation of proxy adviser. e. In case of non-individual clients, accredited investors, and in case of institutional investors seeking recommendation of proxy adviser, fee related terms and conditions shall be governed through bilaterally negotiated contractual terms."
+          }
+        ],
+        "disclaimer": "Demo only. Not legal or financial advice.",
+        "latency_ms": 4174
+      }
+    },
+    {
+      "case": {
+        "id": "ra-fee-advance",
+        "question": "For how long may a research analyst collect fees in advance from an individual client?",
+        "expected_status": "answered",
+        "doc_ids": [
+          "sebi_research_analysts_2026"
+        ],
+        "required_facts": [
+          [
+            "one quarter",
+            "quarter",
+            "three months",
+            "3 months"
+          ],
+          [
+            "one year",
+            "1 year",
+            "12 months"
+          ],
+          [
+            "conflict",
+            "discrepancy",
+            "inconsistent",
+            "contradict",
+            "differs",
+            "difference"
+          ]
+        ],
+        "reference": "Corpus contains a conflict: fee rule (f), PDF page 13, says one year; MITC on PDF page 59 says one quarter. Explain both."
+      },
+      "passed": true,
+      "fact_checks": [
+        true,
+        true,
+        true
+      ],
+      "response": {
+        "request_id": "1efda24f-b7cb-4e2c-bf58-d6dd20478040",
+        "status": "answered",
+        "answer": "The regulatory documents provide conflicting information regarding the maximum period for which a research analyst (RA) may collect fees in advance. One section of the Master Circular for Research Analysts states that such advance fees shall not exceed a period of one year [1]. However, another section of the same document, specifically within the Most Important Terms and Conditions (MITC), states that such advance shall not exceed the period stipulated by SEBI, which it identifies as presently being one quarter [2].",
+        "refusal_reason": null,
+        "citations": [
+          {
+            "chunk_id": "sebi_research_analysts_2026::chunk_049",
+            "doc_id": "sebi_research_analysts_2026",
+            "doc_title": "Master Circular for Research Analysts",
+            "regulator": "SEBI",
+            "section_title": "3 Reference: Circular No. SEBI/HO/MIRSD/MIRSD-PoD/P/CIR/2025/48 dated April 02, 2025",
+            "page": 13,
+            "source_url": "https://www.sebi.gov.in/sebi_data/attachdocs/feb-2026/1770375507051.pdf",
+            "quote": "If agreed by the client, RA may charge fees in advance. However, such advance shall not exceed fees for a period of one year."
+          },
+          {
+            "chunk_id": "sebi_research_analysts_2026::chunk_199",
+            "doc_id": "sebi_research_analysts_2026",
+            "doc_title": "Master Circular for Research Analysts",
+            "regulator": "SEBI",
+            "section_title": "12. Most Important Terms and Conditions (MITC): RA shall also disclose MITC as",
+            "page": 59,
+            "source_url": "https://www.sebi.gov.in/sebi_data/attachdocs/feb-2026/1770375507051.pdf",
+            "quote": "RA may charge fees in advance if agreed by the client. Such advance shall not exceed the period stipulated by SEBI; presently it is one quarter."
+          }
+        ],
+        "disclaimer": "Demo only. Not legal or financial advice.",
+        "latency_ms": 3670
+      }
+    },
+    {
+      "case": {
+        "id": "ra-cash-fees",
+        "question": "Can research analyst fees be paid in cash?",
+        "expected_status": "answered",
+        "doc_ids": [
+          "sebi_research_analysts_2026"
+        ],
+        "required_facts": [
+          [
+            "not allowed",
+            "not permitted",
+            "cannot",
+            "no cash",
+            "prohibited"
+          ]
+        ],
+        "reference": "Research Analysts MITC, corpus PDF page 59."
+      },
+      "passed": true,
+      "fact_checks": [
+        true
+      ],
+      "response": {
+        "request_id": "f3731991-ad05-466f-bf7b-c4d7b9c81447",
+        "status": "answered",
+        "answer": "No, research analyst fees cannot be paid in cash. Clients are required to pay fees through specified banking channels, such as cheque, online bank transfer, or UPI. Additionally, clients may optionally use the Centralized Fee Collection Mechanism (CeFCoM) managed by the Research Analyst Administration and Supervisory Body (RAASB).",
+        "refusal_reason": null,
+        "citations": [
+          {
+            "chunk_id": "sebi_research_analysts_2026::chunk_199",
+            "doc_id": "sebi_research_analysts_2026",
+            "doc_title": "Master Circular for Research Analysts",
+            "regulator": "SEBI",
+            "section_title": "12. Most Important Terms and Conditions (MITC): RA shall also disclose MITC as",
+            "page": 59,
+            "source_url": "https://www.sebi.gov.in/sebi_data/attachdocs/feb-2026/1770375507051.pdf",
+            "quote": "Fees to RA may be paid by the client through any of the specified modes like cheque, online bank transfer, UPI, etc. Cash payment is not allowed."
+          },
+          {
+            "chunk_id": "sebi_research_analysts_2026::chunk_242",
+            "doc_id": "sebi_research_analysts_2026",
+            "doc_title": "Master Circular for Research Analysts",
+            "regulator": "SEBI",
+            "section_title": "Mumbai - 400 051",
+            "page": 70,
+            "source_url": "https://www.sebi.gov.in/sebi_data/attachdocs/feb-2026/1770375507051.pdf",
+            "quote": "Pay your Research Analyst through banking channels only and maintain duly signed receipts mentioning the details of your payments."
+          }
+        ],
+        "disclaimer": "Demo only. Not legal or financial advice.",
+        "latency_ms": 3339
+      }
+    },
+    {
+      "case": {
+        "id": "ra-public-media",
+        "question": "What must a research analyst disclose when making recommendations in public media?",
+        "expected_status": "answered",
+        "doc_ids": [
+          "sebi_research_analysts_2026"
+        ],
+        "required_facts": [
+          [
+            "registration"
+          ],
+          [
+            "financial interest"
+          ]
+        ],
+        "reference": "Research Analysts FAQ 19, corpus PDF page 90."
+      },
+      "passed": true,
+      "fact_checks": [
+        true,
+        true
+      ],
+      "response": {
+        "request_id": "09a25aa1-be78-4726-845c-589de3f192e6",
+        "status": "answered",
+        "answer": "When making recommendations or offering opinions concerning securities through public media, research analysts, research entities, and their directors or employees must disclose their name, registration status, and details of any financial interest in the subject company. These disclosures are required when making recommendations in a personal capacity, responding to queries from audiences or journalists, or communicating the substance of a research report through public media. Additionally, all provisions regarding limitations on trading and compensation apply to these individuals.",
+        "refusal_reason": null,
+        "citations": [
+          {
+            "chunk_id": "sebi_research_analysts_2026::chunk_339",
+            "doc_id": "sebi_research_analysts_2026",
+            "doc_title": "Master Circular for Research Analysts",
+            "regulator": "SEBI",
+            "section_title": "19. What are the disclosures required for making recommendations in public",
+            "page": 90,
+            "source_url": "https://www.sebi.gov.in/sebi_data/attachdocs/feb-2026/1770375507051.pdf",
+            "quote": "They are required to disclose their registration status and details of financial interest in the subject company during public appearance. Under regulation 21(2) of RA Regulations, whenever any person including a director or employee of an investment adviser or credit rating agency or asset management company or fund manager, makes a public appearance or makes a recommendation or offers an opinion concerning securities or public offers through public media, all the provisions of regulation 16 on limitations on trading and regulation 17 on limitations on compensation apply mutatis mutandis to him and he is required to disclose his name, registration status and details of financial interest in the subject company at the time of: (i) making such recommendation or offering such opinion in personal capacity; (ii) responding to queries from audiences or journalists in personal capacity; (iii) communicating the research report or substance of the research report through the public media."
+          }
+        ],
+        "disclaimer": "Demo only. Not legal or financial advice.",
+        "latency_ms": 4023
+      }
+    },
+    {
+      "case": {
+        "id": "ra-third-party-conflicts",
+        "question": "What must a research analyst disclose when distributing a third-party research report?",
+        "expected_status": "answered",
+        "doc_ids": [
+          "sebi_research_analysts_2026"
+        ],
+        "required_facts": [
+          [
+            "conflict of interest",
+            "conflicts of interest"
+          ],
+          [
+            "third party",
+            "third-party"
+          ]
+        ],
+        "reference": "Research Analysts Investor Charter, corpus PDF page 68."
+      },
+      "passed": true,
+      "fact_checks": [
+        true,
+        true
+      ],
+      "response": {
+        "request_id": "46f69ed7-e70a-4e88-91fb-5c405bfccb9a",
+        "status": "answered",
+        "answer": "When distributing a third-party research report, a research analyst must disclose any material conflict of interest of that third-party research provider. Alternatively, the research analyst may provide a web address that directs the recipient to the relevant disclosures of the third-party provider.",
+        "refusal_reason": null,
+        "citations": [
+          {
+            "chunk_id": "sebi_research_analysts_2026::chunk_239",
+            "doc_id": "sebi_research_analysts_2026",
+            "doc_title": "Master Circular for Research Analysts",
+            "regulator": "SEBI",
+            "section_title": "C. Details of services provided to investors (No Indicative Timelines)",
+            "page": 68,
+            "source_url": "https://www.sebi.gov.in/sebi_data/attachdocs/feb-2026/1770375507051.pdf",
+            "quote": "To disclose, while distributing a third party research report, any material conflict of interest of such third party research provider or provide web Page 68 of 107 address that directs a recipient to the relevant disclosures"
+          }
+        ],
+        "disclaimer": "Demo only. Not legal or financial advice.",
+        "latency_ms": 3805
+      }
+    },
+    {
+      "case": {
+        "id": "msme-revival",
+        "question": "What loan limit is covered by the RBI Framework for Revival and Rehabilitation of MSMEs?",
+        "expected_status": "answered",
+        "doc_ids": [
+          "rbi_msme_2017"
+        ],
+        "required_facts": [
+          [
+            "25 crore",
+            "twenty five crore",
+            "250 million"
+          ]
+        ],
+        "reference": "MSME paragraph 4.6, corpus PDF page 6."
+      },
+      "passed": true,
+      "fact_checks": [
+        true
+      ],
+      "response": {
+        "request_id": "ff59d4b2-85d7-4f89-aee0-eea6c598bad3",
+        "status": "answered",
+        "answer": "The RBI Framework for Revival and Rehabilitation of Micro, Small and Medium Enterprises (MSMEs) applies to MSME units that have loan limits of up to \u20b925 crore.",
+        "refusal_reason": null,
+        "citations": [
+          {
+            "chunk_id": "rbi_msme_2017::chunk_021",
+            "doc_id": "rbi_msme_2017",
+            "doc_title": "Master Direction - Lending to Micro, Small & Medium Enterprises (MSME) Sector",
+            "regulator": "RBI",
+            "section_title": "4.6 Framework for Revival and Rehabilitation of MSMEs",
+            "page": 6,
+            "source_url": "https://www.rbi.org.in/commonman/Upload/English/Notification/PDFs/56MD24072017E50D0ED63F9B4414AA756FF0FC72FB66.pdf",
+            "quote": "The revival and rehabilitation of MSME units having loan limits up to \u20b925 crore would be undertaken under this Framework."
+          }
+        ],
+        "disclaimer": "Demo only. Not legal or financial advice.",
+        "latency_ms": 2734
+      }
+    },
+    {
+      "case": {
+        "id": "tax-capital-gains-refusal",
+        "question": "What tax treatment applies to mutual fund capital gains?",
+        "expected_status": "refused",
+        "doc_ids": [],
+        "required_facts": []
+      },
+      "passed": true,
+      "fact_checks": [],
+      "response": {
+        "request_id": "941bd458-9a53-40bb-a974-901b598100f7",
+        "status": "refused",
+        "answer": "",
+        "refusal_reason": "not_in_corpus",
+        "citations": [],
+        "disclaimer": "Demo only. Not legal or financial advice.",
+        "latency_ms": 3002
+      }
+    },
+    {
+      "case": {
+        "id": "tax-gst-refusal",
+        "question": "How is GST applied to cross-border SaaS sales?",
+        "expected_status": "refused",
+        "doc_ids": [],
+        "required_facts": []
+      },
+      "passed": true,
+      "fact_checks": [],
+      "response": {
+        "request_id": "a6d6f793-6ecb-4a86-a379-33f1f0c4fc85",
+        "status": "refused",
+        "answer": "",
+        "refusal_reason": "not_in_corpus",
+        "citations": [],
+        "disclaimer": "Demo only. Not legal or financial advice.",
+        "latency_ms": 3091
+      }
+    },
+    {
+      "case": {
+        "id": "labour-refusal",
+        "question": "What labour law notice period is required for factory layoffs?",
+        "expected_status": "refused",
+        "doc_ids": [],
+        "required_facts": []
+      },
+      "passed": true,
+      "fact_checks": [],
+      "response": {
+        "request_id": "75b7f311-2155-440d-982a-977cca380269",
+        "status": "refused",
+        "answer": "",
+        "refusal_reason": "insufficient_support",
+        "citations": [],
+        "disclaimer": "Demo only. Not legal or financial advice.",
+        "latency_ms": 1907
+      }
+    },
+    {
+      "case": {
+        "id": "ambiguous-refusal",
+        "question": "What does this circular require?",
+        "expected_status": "refused",
+        "doc_ids": [],
+        "required_facts": []
+      },
+      "passed": true,
+      "fact_checks": [],
+      "response": {
+        "request_id": "dc53cd34-5460-41d0-aae0-d0ea3a9a3662",
+        "status": "refused",
+        "answer": "",
+        "refusal_reason": "ambiguous_question",
+        "citations": [],
+        "disclaimer": "Demo only. Not legal or financial advice.",
+        "latency_ms": 0
+      }
+    },
+    {
+      "case": {
+        "id": "followup-small-account",
+        "question": "What about those limits on monthly withdrawals?",
+        "history": [
+          {
+            "role": "user",
+            "content": "What are the RBI KYC small account limits?"
+          },
+          {
+            "role": "assistant",
+            "content": "Small accounts have limits on annual credits, monthly withdrawals and their balance."
+          }
+        ],
+        "expected_status": "answered",
+        "doc_ids": [
+          "rbi_kyc_2016"
+        ],
+        "required_facts": [
+          [
+            "ten thousand",
+            "10000"
+          ],
+          [
+            "month"
+          ]
+        ],
+        "reference": "KYC paragraph 23; resolve the pronoun from conversation history."
+      },
+      "passed": true,
+      "fact_checks": [
+        true,
+        true
+      ],
+      "response": {
+        "request_id": "bc211b5a-02d4-458a-a2aa-1e605b029ff4",
+        "status": "answered",
+        "answer": "The monthly withdrawal and transfer limit for an RBI KYC small account is ten thousand rupees [1].",
+        "refusal_reason": null,
+        "citations": [
+          {
+            "chunk_id": "rbi_kyc_2016::chunk_050",
+            "doc_id": "rbi_kyc_2016",
+            "doc_title": "Master Direction - Know Your Customer (KYC) Direction, 2016",
+            "regulator": "RBI",
+            "section_title": "23. 73Notwithstanding anything contained in paragraph 16 and as an alternative",
+            "page": 32,
+            "source_url": "https://www.rbi.org.in/commonman/Upload/English/Notification/PDFs/MD18KYCF6E92C82E1E1419D87323E3869BC9F13.pdf",
+            "quote": "the aggregate of all withdrawals and transfers in a month does not exceed rupees ten thousand"
+          }
+        ],
+        "disclaimer": "Demo only. Not legal or financial advice.",
+        "latency_ms": 4676
+      }
+    }
+  ]
+}
