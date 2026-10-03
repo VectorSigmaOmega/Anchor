@@ -99,3 +99,18 @@ async def test_rate_limits_use_trusted_client_and_return_retry_after(app, path):
     if path.startswith("/chat-api/"):
         assert "createdAt" in response.json()["conversation"]
         app.state.repository.complete_chat_assistant_message.assert_awaited_once()
+
+
+@pytest.mark.parametrize("path", ["/query", "/chat-api/conversations/{id}/query"])
+@pytest.mark.parametrize("length,expected_status", [(4000, 503), (4001, 422)])
+async def test_long_questions_reach_the_service_and_overlimit_questions_are_rejected(app, path, length, expected_status):
+    app.state.settings.max_query_chars = 4000
+    question = "q" * length
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(path.replace("{id}", str(uuid4())), json={"question": question})
+    assert response.status_code == expected_status
+    if length == 4000:
+        # The mock provider fails, proving length validation forwarded all text.
+        assert app.state.query_service.execute.call_args.args[0] == question
+    else:
+        app.state.query_service.execute.assert_not_awaited()

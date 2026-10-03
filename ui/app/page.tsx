@@ -107,7 +107,8 @@ const FAQS: { question: string; answer: React.ReactNode }[] = [
     question: "Which models does Anchor use?",
     answer: (
       <>
-        Anchor uses <code>gemini-3.1-flash-lite</code> for generation and{" "}
+        Anchor uses <code>gemini-3.1-flash-lite</code> for ordinary answers,{" "}
+        <code>gemini-3.5-flash-lite</code> for multipart answers, and{" "}
         <code>gemini-embedding-2</code> for embeddings. Cohere Rerank puts the
         results in a new order. PostgreSQL with pgvector does the retrieval. Each
         request makes a trace.

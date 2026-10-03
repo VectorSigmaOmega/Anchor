@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 class ConversationTurn(BaseModel):
     role: Literal["user", "assistant"]
-    content: str = Field(min_length=1, max_length=2000)
+    content: str = Field(min_length=1, max_length=16000)
 
     @field_validator("content", mode="before")
     @classmethod

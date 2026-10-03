@@ -1,5 +1,11 @@
 # Live response quality: 3 October 2026
 
+This report records the earlier 24-case comparison and three starter-question
+checks. The later [multipart evaluation](MULTIPART_EVALUATION.md) covers the
+4,000-character limit, expanded retrieval, verified excerpt references and
+conditional Gemini 3.5 Flash-Lite generation. Its results supersede the model
+recommendation below for multipart requests.
+
 The revised pipeline passed 24 of 24 reviewed cases against the existing production
 index, up from 22 of 24 after Gemini billing was restored. All three questions offered
 by the website also passed a separate check. Gemini remains the generation and

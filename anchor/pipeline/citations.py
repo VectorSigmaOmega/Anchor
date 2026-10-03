@@ -77,15 +77,16 @@ def validate_and_hydrate_citations(
         return False, []
 
     citations: list[Citation] = []
-    seen: set[str] = set()
+    seen: set[tuple[str, str]] = set()
     for item in model_response.citations:
-        if item.chunk_id in seen:
-            return False, []
         chunk = chunk_map.get(item.chunk_id)
         if not chunk:
             return False, []
         quote = verified_quote(item.quote, chunk.retrieval_text())
         if quote is None:
+            return False, []
+        key = (item.chunk_id, quote)
+        if key in seen:
             return False, []
         citations.append(
             Citation(
@@ -99,8 +100,11 @@ def validate_and_hydrate_citations(
                 quote=quote,
             )
         )
-        seen.add(item.chunk_id)
-    markers = [int(marker) for marker in re.findall(r"\[(\d+)\]", model_response.answer)]
+        seen.add(key)
+    references = re.findall(r"\[([^\[\]\n]+)\]", model_response.answer)
+    if any(not reference.isdigit() for reference in references):
+        return False, []
+    markers = [int(marker) for marker in references]
     if any(marker < 1 or marker > len(citations) for marker in markers):
         return False, []
     return bool(citations), citations

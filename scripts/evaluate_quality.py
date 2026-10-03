@@ -35,6 +35,10 @@ def failures(case: dict, response: dict) -> list[str]:
             result.append("missing fact: " + pattern)
     if not any(citation["doc_id"] in case["doc_ids"] for citation in response["citations"]):
         result.append("missing expected source")
+    cited_documents = {citation["doc_id"] for citation in response["citations"]}
+    for doc_id in case.get("required_doc_ids", []):
+        if doc_id not in cited_documents:
+            result.append("missing required source: " + doc_id)
     return result
 
 
@@ -58,8 +62,11 @@ async def run(args):
     failed = False
     try:
         with Path(args.output).open("w") as output:
-            for model in args.models.split(","):
-                current = settings.model_copy(update={"generation_model": model})
+            for model in args.models.split(",") if args.models else [settings.generation_model]:
+                overrides = {"generation_model": model}
+                if args.models:
+                    overrides["multipart_generation_model"] = model
+                current = settings.model_copy(update=overrides)
                 generation = GeminiGenerationProvider(current)
                 service = QueryService(
                     settings=current,
@@ -81,13 +88,17 @@ async def run(args):
                             chunks = [RetrievedChunk(**chunk) for chunk in contexts[case["id"]].get("context", [])]
                             question = contextualize_question(case["question"], history)
                             model_response = await service._generate_with_retry(question, chunks, NullTrace())
-                            valid, citations = validate_and_hydrate_citations(model_response, chunks, max_rendered=4)
+                            valid, citations = validate_and_hydrate_citations(
+                                model_response, chunks, max_rendered=current.max_citations,
+                            )
                             if not valid:
                                 model_response = await generation.generate(
                                     question=question, context_chunks=chunks,
                                     retry_note=service._validation_retry_note(model_response),
                                 )
-                                valid, citations = validate_and_hydrate_citations(model_response, chunks, max_rendered=4)
+                                valid, citations = validate_and_hydrate_citations(
+                                    model_response, chunks, max_rendered=current.max_citations,
+                                )
                             if not valid:
                                 record["invalid_model_response"] = model_response.model_dump(mode="json")
                                 raise ValueError("invalid supporting citations")
@@ -102,6 +113,7 @@ async def run(args):
                         else:
                             result = await service.execute(case["question"], history=history)
                         response = result.response.model_dump(mode="json")
+                        record["model"] = getattr(generation, "last_model_used", model)
                         errors = failures(case, response)
                         record.update(
                             response=response,
@@ -121,11 +133,14 @@ async def run(args):
                     output.write(json.dumps(record) + "\n")
                     output.flush()
                     print(json.dumps({
-                        "id": case["id"], "model": model, "failures": record["failures"], "elapsed": record["elapsed_seconds"]
+                        "id": case["id"], "model": record["model"], "failures": record["failures"], "elapsed": record["elapsed_seconds"]
                     }), flush=True)
                     if args.pause:
                         await asyncio.sleep(args.pause)
-                print(json.dumps({"model": model, "passed": passed, "total": len(cases)}), flush=True)
+                print(json.dumps({
+                    "model": model if args.models else "configured routing",
+                    "passed": passed, "total": len(cases),
+                }), flush=True)
     finally:
         await database.close()
     return int(failed)
@@ -134,7 +149,7 @@ async def run(args):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", default="eval/quality.jsonl")
-    parser.add_argument("--models", default="gemini-3.1-flash-lite")
+    parser.add_argument("--models", help="Pin both ordinary and multipart generation to these models; default uses configured routing.")
     parser.add_argument("--output", required=True)
     parser.add_argument("--only")
     parser.add_argument("--pause", type=float, default=6.5, help="Pause between cases; default respects Cohere's trial quota.")

@@ -78,7 +78,7 @@ type Conversation = {
   messages: ConversationMessage[];
 };
 
-const MAX_QUERY_LENGTH = 800;
+const MAX_QUERY_LENGTH = 4000;
 const REQUEST_TIMEOUT_MS = 45_000;
 const MAX_SAVED_CONVERSATIONS = 20;
 const CHAT_API_BASE = "/chat-api/conversations";
@@ -1111,12 +1111,11 @@ export default function ChatConsole() {
   }
 
   function updateDraft(value: string) {
+    setDraft(value);
     if (value.length > MAX_QUERY_LENGTH) {
-      setDraft(value.slice(0, MAX_QUERY_LENGTH));
-      setComposerError(`Messages are limited to ${MAX_QUERY_LENGTH} characters.`);
+      setComposerError(`Keep the message to ${MAX_QUERY_LENGTH.toLocaleString()} characters. Your text has been preserved.`);
       return;
     }
-    setDraft(value);
     setComposerError("");
   }
 

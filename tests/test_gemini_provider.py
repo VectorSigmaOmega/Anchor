@@ -226,3 +226,33 @@ def test_generation_provider_parses_structured_output_and_records_usage() -> Non
     assert payload["generationConfig"]["thinkingConfig"] == {"thinkingLevel": "minimal"}
     assert payload["generationConfig"]["responseMimeType"] == "application/json"
     assert "responseJsonSchema" in payload["generationConfig"]
+
+
+@pytest.mark.parametrize("questions", [[], ["same", "same"], ["valid", 123], ["q"] * 7])
+async def test_malformed_retrieval_plans_cannot_be_used_for_search(questions):
+    provider = GeminiGenerationProvider(settings())
+    provider.client = FakeGeminiClient({
+        "candidates": [{"content": {"parts": [{"text": json.dumps({"questions": questions})}]}}],
+    })
+    with pytest.raises(ProviderError, match="invalid retrieval plan"):
+        await provider.plan_retrieval_questions("Compare fees; deposits; segregation.")
+
+
+async def test_multipart_generation_selects_source_text_and_uses_the_configured_model():
+    provider = GeminiGenerationProvider(settings())
+    provider.client = FakeGeminiClient({
+        "candidates": [{"content": {"parts": [{"text": json.dumps({
+            "status": "answered", "answer": "The last supporting fact [E6].",
+        })}]}}],
+    })
+    chunks = [RetrievedChunk(chunk_id=f"chunk-{n}", doc_id="fixture", doc_title="Fixture", regulator="SEBI",
+                             section_path="Requirements", text=f"Supporting fact {n}.", source_url="https://example.com")
+              for n in range(6)]
+    result = await provider.generate(question="Compare requirements; fees; deposits.", context_chunks=chunks)
+    path, payload = provider.client.calls[0]
+    assert path == "gemini-3.5-flash-lite:generateContent"
+    assert payload["generationConfig"]["thinkingConfig"] == {"thinkingLevel": "low"}
+    assert payload["generationConfig"]["maxOutputTokens"] == 4096
+    assert result.answer == "The last supporting fact [1]."
+    assert result.citations[0].quote == "Supporting fact 5."
+    assert result.citations[0].chunk_id == "chunk-5"
