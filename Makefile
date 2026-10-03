@@ -2,7 +2,7 @@ PYTHON ?= .venv/bin/python
 PIP ?= .venv/bin/pip
 UI_DIR := ui
 
-.PHONY: setup dev migrate ingest test lint eval-smoke eval ui-build build deploy
+.PHONY: setup dev api-dev corpus-sync benchmark migrate ingest test lint eval-smoke eval ui-build build deploy
 
 setup:
 	python3 -m venv .venv
@@ -13,6 +13,16 @@ dev:
 	docker compose up -d postgres
 	$(PYTHON) -m anchor.db.migrate
 	$(PYTHON) -m uvicorn anchor.api.app:create_app --factory --reload --host 0.0.0.0 --port 8000
+
+api-dev:
+	$(PYTHON) -m anchor.db.migrate
+	$(PYTHON) -m uvicorn anchor.api.app:create_app --factory --reload --host 127.0.0.1 --port 8000
+
+corpus-sync:
+	$(PYTHON) -m scripts.sync_corpus
+
+benchmark:
+	$(PYTHON) -m scripts.benchmark_answers
 
 migrate:
 	$(PYTHON) -m anchor.db.migrate

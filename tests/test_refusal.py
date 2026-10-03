@@ -34,6 +34,7 @@ def chunk(
 def test_ambiguous_question_detection() -> None:
     assert is_ambiguous_question("What does this circular require?")
     assert not is_ambiguous_question("What does the RBI KYC direction require for customer due diligence?")
+    assert not is_ambiguous_question("What is the annual research analyst fee limit, and does it apply to accredited investors?")
 
 
 def test_tax_rates_are_out_of_scope_but_regulatory_fee_disclosures_are_supported() -> None:

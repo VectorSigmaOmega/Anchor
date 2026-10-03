@@ -20,6 +20,17 @@ STOPWORDS = {
     "the",
     "to",
     "what",
+    "does",
+    "must",
+    "should",
+    "can",
+    "could",
+    "please",
+    "tell",
+    "about",
+    "under",
+    "how",
+    "explain",
     "when",
     "which",
     "with",
@@ -38,6 +49,10 @@ def is_ambiguous_question(question: str) -> bool:
     lowered = question.lower()
     if "latest one" in lowered or "this rule" in lowered or "that circular" in lowered:
         return True
+    # A pronoun inside an otherwise specific question often refers to its
+    # explicit subject: "the annual RA fee limit ... does it apply to ...?".
+    if re.search(r"\bit\b", lowered) and len(significant_terms(question) - {"it"}) >= 5:
+        return False
     return bool(AMBIGUOUS_RE.search(question)) and not any(
         marker in lowered for marker in ("rbi", "sebi", "kyc", "master direction", "master circular")
     )

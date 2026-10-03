@@ -20,6 +20,7 @@ async def test_application_lifespan_initializes_the_query_service(monkeypatch):
     database = SimpleNamespace(open=AsyncMock(), close=AsyncMock())
     monkeypatch.setattr(api, "get_settings", lambda: settings)
     monkeypatch.setattr(api, "Database", lambda settings: database)
+    monkeypatch.setattr(api, "AnchorRepository", lambda db, settings: SimpleNamespace(validate_embedding_profile=AsyncMock()))
     application = api.create_app()
 
     async with api.lifespan(application):

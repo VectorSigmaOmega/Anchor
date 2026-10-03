@@ -47,7 +47,7 @@ def main() -> None:
     parser.add_argument("--smoke", action="store_true")
     parser.add_argument("--fixture-mode", action="store_true")
     parser.add_argument("--write-docs", action="store_true")
-    parser.add_argument("--pause", type=float, default=6.5, help="Pause between live cases; fixture runs do not pause.")
+    parser.add_argument("--pause", "--pause-seconds", type=float, default=6.5, help="Pause between live cases; fixture runs do not pause.")
     args = parser.parse_args()
     raise SystemExit(asyncio.run(run(args)))
 

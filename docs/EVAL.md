@@ -4,7 +4,9 @@ Source-reviewed live answer checks and model comparison: [Response quality repor
 
 ## Current Status
 
-- Verified locally: fixture smoke evaluation path.
+- Verified: fixture smoke plumbing; 14/14 focused live corpus checks and 27/27
+  reviewed live answer checks on the integrated 2026-10-03 release. See
+  [Recovery report](RECOVERY_REPORT.md) for saved outputs and grading limits.
 - Not yet verified: live full evaluation against an indexed PostgreSQL corpus and real Gemini/Cohere API calls.
 - Production-readiness implication: the current checked-in metrics prove eval plumbing only. They do not prove retrieval quality, refusal quality, latency, or grounded answer quality in production.
 

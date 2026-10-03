@@ -11,13 +11,8 @@ from anchor.schemas import ConversationTurn, RetrievedChunk
 
 
 def settings() -> Settings:
-    return Settings.model_validate(
-        {
-            "database_url": "postgresql://anchor:anchor@localhost:5432/anchor",
-            "gemini_api_key": "key",
-            "cohere_api_key": "key",
-        }
-    )
+    return Settings(_env_file=None, database_url="postgresql://anchor:anchor@localhost:5432/anchor",
+                    gemini_api_key="key", cohere_api_key="key")
 
 
 class FakeGeminiClient:

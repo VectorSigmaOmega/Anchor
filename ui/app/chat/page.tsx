@@ -195,6 +195,9 @@ async function deleteServerConversation(conversationId: string): Promise<void> {
 }
 
 function getResponseError(payload: unknown, status: number): string {
+  if (status === 429) {
+    return "This connection has reached the demo query limit. Please wait before trying again.";
+  }
   if (status >= 500) {
     return "The query service is temporarily unavailable. Please try again.";
   }
@@ -218,6 +221,16 @@ function safeSourceUrl(sourceUrl: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function citationUrl(citation: CitationRecord): string | undefined {
+  const safeUrl = safeSourceUrl(citation.source_url);
+  if (!safeUrl) return undefined;
+  const url = new URL(safeUrl);
+  if (citation.page && url.pathname.toLowerCase().endsWith(".pdf")) {
+    url.hash = `page=${citation.page}`;
+  }
+  return url.href;
 }
 
 function formatLatency(latencyMs?: number): string | null {
@@ -263,7 +276,8 @@ function assistantMeta(message: ConversationMessage): string {
  * so the accent marks exactly the thing you can open.
  */
 function SourceReference({ citation }: { citation: CitationRecord }) {
-  const url = safeSourceUrl(citation.source_url);
+  const url = citationUrl(citation);
+  const section = citation.section_title.replace(/(\d+\.)\s+\d+(?=[A-Z])/g, "$1 ");
 
   return (
     <span className="source-ref">
@@ -274,7 +288,7 @@ function SourceReference({ citation }: { citation: CitationRecord }) {
       ) : (
         <span className="source-doc">{citation.doc_title}</span>
       )}
-      {citation.section_title ? `, ${citation.section_title}` : null}
+      {section ? `, ${section}` : null}
       {citation.page ? ` · p. ${citation.page}` : null}
     </span>
   );
@@ -286,7 +300,7 @@ function SourceReference({ citation }: { citation: CitationRecord }) {
  * the superscript citation marks the rest of the design uses. Numbers outside
  * the citation list are left as literal text rather than linked to nothing.
  */
-function AnswerText({ answer, count }: { answer: string; count: number }) {
+function AnswerText({ answer, count, sourcePrefix }: { answer: string; count: number; sourcePrefix: string }) {
   if (count === 0 || !/\[\d+\]/.test(answer)) {
     return <p className="answer-text">{answer}</p>;
   }
@@ -302,7 +316,7 @@ function AnswerText({ answer, count }: { answer: string; count: number }) {
         }
         return (
           <sup className="cite" key={index}>
-            {value}
+            <a href={`#${sourcePrefix}-${value}`} aria-label={`Source ${value}`}>{value}</a>
           </sup>
         );
       })}
@@ -310,55 +324,21 @@ function AnswerText({ answer, count }: { answer: string; count: number }) {
   );
 }
 
-function RetrievalSummary({ response }: { response: QueryResponse }) {
-  const cited = response.citations.length;
-  const latency = formatLatency(response.latency_ms);
-
-  if (response.status !== "answered" || cited === 0) {
-    return null;
-  }
-
-  // Only figures the response actually carries appear here. The prototype showed
-  // a total passage count ("24 passages"); the query API does not report one, and
-  // inventing it would undercut the point of the card.
-  return (
-    <details className="tool-call">
-      <summary>
-        <span className="tool-chev">
-          <ChevronDown size={14} />
-        </span>
-        <span className="tool-name">retrieve</span>
-        <span className="tool-meta">
-          {cited} cited {cited === 1 ? "passage" : "passages"}
-          {latency ? ` · ${latency}` : ""}
-        </span>
-      </summary>
-      <div className="tool-body">
-        <span>Hybrid retrieval over PostgreSQL and pgvector</span>
-        <span>Reciprocal rank fusion, then Cohere rerank</span>
-        <span>
-          {cited} {cited === 1 ? "passage" : "passages"} above the support
-          threshold, all cited
-        </span>
-      </div>
-    </details>
-  );
-}
-
-function AnswerContent({ response }: { response: QueryResponse }) {
+function AnswerContent({ response, messageId }: { response: QueryResponse; messageId: string }) {
   const { citations } = response;
   const count = citations.length;
+  const sourcePrefix = `source-${messageId}`;
 
   return (
     <div className="answer">
-      <AnswerText answer={response.answer} count={count} />
-      <RetrievalSummary response={response} />
+      <AnswerText answer={response.answer} count={count} sourcePrefix={sourcePrefix} />
 
       {count > 0 ? (
         <div className="answer-sources">
+          <p className="sources-label">Official sources</p>
           <ol className="sources">
             {citations.map((citation, index) => (
-              <li key={citation.chunk_id} className="source">
+              <li key={citation.chunk_id} id={`${sourcePrefix}-${index + 1}`} className="source">
                 <span className="source-n">{index + 1}</span>
                 <span className="reg">{citation.regulator}</span>
                 <SourceReference citation={citation} />
@@ -371,11 +351,11 @@ function AnswerContent({ response }: { response: QueryResponse }) {
               <span className="evidence-chev">
                 <ChevronDown size={14} />
               </span>
-              Read the {count === 1 ? "excerpt" : "excerpts"}
+              Read supporting {count === 1 ? "excerpt" : "excerpts"}
             </summary>
             <div className="evidence-list">
               {citations.map((citation) => {
-                const url = safeSourceUrl(citation.source_url);
+                const url = citationUrl(citation);
                 const location = citation.page
                   ? `Page ${citation.page}`
                   : "HTML source";
@@ -398,7 +378,7 @@ function AnswerContent({ response }: { response: QueryResponse }) {
                         target="_blank"
                         rel="noreferrer"
                       >
-                        Open official source
+                        {citation.page ? `Open source at page ${citation.page}` : "Open official source"}
                         <ArrowUpRight size={13} />
                       </a>
                     ) : null}
@@ -473,7 +453,10 @@ function MessageActions({
 
 function RefusalContent({ response }: { response: QueryResponse }) {
   const reason = response.refusal_reason;
-  const isRateLimited = reason === "rate_limited";
+  const title = reason === "rate_limited" ? "Query limit reached"
+    : reason === "ambiguous_question" ? "Please clarify your question"
+    : reason === "not_in_corpus" ? "Outside the indexed corpus"
+    : "More evidence needed";
   const description = reason
     ? REFUSAL_COPY[reason]
     : "The corpus did not support a reliable answer to this question.";
@@ -481,7 +464,7 @@ function RefusalContent({ response }: { response: QueryResponse }) {
   return (
     <div className="note">
       <span className="note-title">
-        {isRateLimited ? "Query limit reached" : "No grounded answer"}
+        {title}
       </span>
       <p className="note-body">{description}</p>
     </div>
@@ -497,9 +480,9 @@ function FailureContent({
 }) {
   const wasStopped = message.status === "stopped";
   return (
-    <div className="note">
+    <div className="note" role="alert">
       <span className="note-title">
-        {wasStopped ? "Response stopped" : "Response failed"}
+        {wasStopped ? "Response stopped" : "Unable to complete this answer"}
       </span>
       <p className="note-body">
         {message.error ?? "The query could not be completed. Please try again."}
@@ -519,7 +502,7 @@ function FailureContent({
 function PendingContent() {
   return (
     <p className="thinking" role="status">
-      Searching the corpus
+      Searching and checking official sources…
     </p>
   );
 }
@@ -563,7 +546,7 @@ function Transcript({
         } else if (message.status === "error" || message.status === "stopped") {
           body = <FailureContent message={message} onRetry={onRetry} />;
         } else if (message.response?.status === "answered") {
-          body = <AnswerContent response={message.response} />;
+          body = <AnswerContent response={message.response} messageId={message.id} />;
         } else if (message.response) {
           body = <RefusalContent response={message.response} />;
         } else {

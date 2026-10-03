@@ -12,7 +12,8 @@ from anchor.db.pool import Database
 from anchor.db.repository import AnchorRepository
 from anchor.logging import configure_logging
 from anchor.pipeline.service import DISCLAIMER, QueryService
-from anchor.providers.gemini import GeminiEmbeddingProvider, GeminiGenerationProvider, ProviderError
+from anchor.providers.factory import build_embedding_provider, build_generation_provider
+from anchor.providers.gemini import ProviderError
 from anchor.providers.rerank import CohereRerankProvider
 from anchor.schemas import (
     ChatConversation,
@@ -46,8 +47,9 @@ async def lifespan(app: FastAPI):
     database = Database(settings)
     await database.open()
     repository = AnchorRepository(database, settings)
-    embedding_provider = GeminiEmbeddingProvider(settings)
-    generation_provider = GeminiGenerationProvider(settings)
+    await repository.validate_embedding_profile()
+    embedding_provider = build_embedding_provider(settings)
+    generation_provider = build_generation_provider(settings)
     rerank_provider = CohereRerankProvider(settings)
     tracer = Tracer(settings)
     metrics = Metrics(settings.metrics_namespace)

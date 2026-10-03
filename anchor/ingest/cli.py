@@ -7,7 +7,7 @@ from anchor.db.repository import AnchorRepository
 from anchor.ingest.fetch import DocumentFetcher
 from anchor.ingest.service import IngestionService
 from anchor.logging import configure_logging
-from anchor.providers.gemini import GeminiEmbeddingProvider
+from anchor.providers.factory import build_embedding_provider
 
 
 async def run() -> None:
@@ -18,8 +18,9 @@ async def run() -> None:
     await database.open()
     try:
         repository = AnchorRepository(database, settings)
+        await repository.validate_embedding_profile()
         fetcher = DocumentFetcher(settings)
-        embedding_provider = GeminiEmbeddingProvider(settings)
+        embedding_provider = build_embedding_provider(settings)
         service = IngestionService(repository, fetcher, embedding_provider)
         summary = await service.run()
         print(json.dumps(summary, ensure_ascii=True))
