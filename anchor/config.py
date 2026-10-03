@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     rate_limit_rpd: int = Field(default=100, gt=0)
     max_query_chars: int = Field(default=4000, gt=0)
     max_completion_tokens: int = 2048
+    multipart_workflow_enabled: bool = False
+    workflow_timeout_seconds: float = Field(default=35.0, gt=0)
     multipart_max_completion_tokens: int = 4096
     multipart_context_top_k: int = 16
     multipart_rerank_candidate_count: int = 40

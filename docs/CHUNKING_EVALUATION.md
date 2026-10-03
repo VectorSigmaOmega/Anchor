@@ -208,3 +208,11 @@ index mutation: the server installed PyMuPDF 1.28.2, while evaluation used
 1.27.2.3. That newer parser produced four fewer LODR/NCS chunks. Pinning the
 evaluated PyMuPDF version makes source extraction reproducible across deployment
 and evaluation; parser upgrades must rerun the source and focused checks.
+
+Production rollout completed after the parser-version pin: deployment run
+37153435797 succeeded, all 16 active documents report `layout-structured-v2`,
+and PostgreSQL contains 4,012 chunks. Readiness and a public Playwright MSME
+query pass. The 27 existing ordinary regression cases also pass on the new local
+index with configured model routing. The separate
+[workflow experiment](WORKFLOW_EVALUATION.md) records remaining complex-answer
+failures without using them to continue tuning the chunker.

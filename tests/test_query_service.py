@@ -534,3 +534,69 @@ def test_query_service_boosts_documents_named_in_conversation_context() -> None:
     assert boosted[0].chunk_id == "sebi-ra-005"
     assert (boosted[0].relevance_score or 0.0) > (other.relevance_score or 0.0)
     assert [chunk.chunk_id for chunk in context] == ["sebi-ra-005"]
+
+
+async def test_multipart_workflow_runs_claim_review_before_returning_answer(monkeypatch):
+    from anchor.pipeline.workflow import AnswerReview, EvidenceReview
+
+    calls = []
+
+    class WorkflowProvider(FakeGenerationProvider):
+        last_usage_metadata = {}
+
+        def __init__(self, settings):
+            pass
+
+        async def plan_retrieval_questions(self, question):
+            return ["RBI customer identification requirements", "RBI account opening duties"]
+
+        async def assess_evidence(self, question, requirements, context):
+            return EvidenceReview(missing_searches=[], limitations=[], findings=[])
+
+        async def verify_answer(self, question, requirements, draft, context):
+            calls.append("verify")
+            return AnswerReview(issues=[])
+
+    monkeypatch.setattr("anchor.providers.workflow.GeminiWorkflowProvider", WorkflowProvider)
+    settings = Settings(_env_file=None, database_url="postgresql://test", multipart_workflow_enabled=True)
+    service = QueryService(settings=settings, repository=FakeRepository(), embedding_provider=FakeEmbeddingProvider(),
+                           generation_provider=FakeGenerationProvider(), rerank_provider=FakeRerankProvider(),
+                           tracer=Tracer(settings), metrics=Metrics("anchor_workflow_test"))
+    result = await service.execute("(1) What identification is required under RBI KYC? (2) What must banks do before opening accounts?")
+    assert result.response.status == "answered"
+    assert calls == ["verify"]
+
+
+async def test_workflow_cannot_return_draft_after_persistent_claim_failure(monkeypatch):
+    from anchor.pipeline.workflow import AnswerReview, EvidenceReview
+
+    class WorkflowProvider(FakeGenerationProvider):
+        last_usage_metadata = {}
+        generations = 0
+
+        def __init__(self, settings):
+            pass
+
+        async def plan_retrieval_questions(self, question):
+            return ["RBI customer identification requirements", "RBI account opening duties"]
+
+        async def assess_evidence(self, question, requirements, context):
+            return EvidenceReview(missing_searches=[], limitations=[], findings=[])
+
+        async def generate(self, **kwargs):
+            type(self).generations += 1
+            return await super().generate(**kwargs)
+
+        async def verify_answer(self, question, requirements, draft, context):
+            return AnswerReview(issues=["Cited passage does not support the claimed amount."])
+
+    monkeypatch.setattr("anchor.providers.workflow.GeminiWorkflowProvider", WorkflowProvider)
+    settings = Settings(_env_file=None, database_url="postgresql://test", multipart_workflow_enabled=True)
+    service = QueryService(settings=settings, repository=FakeRepository(), embedding_provider=FakeEmbeddingProvider(),
+                           generation_provider=FakeGenerationProvider(), rerank_provider=FakeRerankProvider(),
+                           tracer=Tracer(settings), metrics=Metrics("anchor_workflow_test"))
+    result = await service.execute("(1) What identification is required under RBI KYC? (2) What must banks do before opening accounts?")
+    assert result.response.status == "refused"
+    assert result.response.answer == ""
+    assert result.response.citations == []
+    assert WorkflowProvider.generations == 2
