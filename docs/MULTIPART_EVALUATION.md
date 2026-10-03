@@ -105,6 +105,11 @@ with 15 citations from both circulars; all reviewed fact checks passed. The
 [public response artifact](../eval/reports/multipart-public-2026-10-03.json)
 preserves that result. Citation lists use per-message citation numbers as unique
 display keys so multiple supporting excerpts from one chunk render independently.
+The public saved-conversation follow-up about current client counts also returned
+a supported answer in 3.084 s. Additional UI checks confirmed that both Send and
+Enter preserve a rejected 4,001-character draft and make no query request. Astryx
+clears the composer after submission, so rejected drafts and their error are
+restored after that update.
 
 ## Limits
 

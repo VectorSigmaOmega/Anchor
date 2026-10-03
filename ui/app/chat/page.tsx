@@ -945,7 +945,12 @@ export default function ChatConsole() {
       return;
     }
     if (question.length > MAX_QUERY_LENGTH) {
-      setComposerError(`Keep the message to ${MAX_QUERY_LENGTH} characters.`);
+      // Astryx clears its input after onSubmit. Restore a rejected draft after
+      // that update so both Send and Enter preserve the user's complete text.
+      window.setTimeout(() => {
+        setDraft(rawMessage);
+        setComposerError(`Keep the message to ${MAX_QUERY_LENGTH.toLocaleString()} characters. Your text has been preserved.`);
+      }, 0);
       return;
     }
 
