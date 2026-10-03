@@ -1,0 +1,202 @@
+{
+  "kyc_individual": [
+    {
+      "fact": "Aadhaar/OVD option",
+      "doc_id": "rbi_kyc_2016",
+      "pattern": "any OVD"
+    },
+    {
+      "fact": "PAN or Form60",
+      "doc_id": "rbi_kyc_2016",
+      "pattern": "Permanent Account Number"
+    },
+    {
+      "fact": "Form60 alternative",
+      "doc_id": "rbi_kyc_2016",
+      "pattern": "Form No. 60"
+    },
+    {
+      "fact": "CKYCR option",
+      "doc_id": "rbi_kyc_2016",
+      "pattern": "KYC Identifier"
+    }
+  ],
+  "kyc_small_limits": [
+    {
+      "fact": "annual credit cap",
+      "doc_id": "rbi_kyc_2016",
+      "pattern": "credits in a financial year does not exceed rupees one lakh"
+    },
+    {
+      "fact": "monthly withdrawal/transfer cap",
+      "doc_id": "rbi_kyc_2016",
+      "pattern": "withdrawals and transfers in a month does not exceed rupees ten thousand"
+    },
+    {
+      "fact": "balance cap",
+      "doc_id": "rbi_kyc_2016",
+      "pattern": "balance at any point of time does not exceed rupees fifty thousand"
+    },
+    {
+      "fact": "balance exception",
+      "doc_id": "rbi_kyc_2016",
+      "pattern": "Government grants, welfare benefits and payment against procurements"
+    }
+  ],
+  "kyc_small_duration": [
+    {
+      "fact": "initial/extension periods",
+      "doc_id": "rbi_kyc_2016",
+      "pattern": "twelve months which can be extended for a further period of twelve months"
+    },
+    {
+      "fact": "extension evidence condition",
+      "doc_id": "rbi_kyc_2016",
+      "pattern": "evidence of having applied for any of the OVDs during the first twelve months"
+    },
+    {
+      "fact": "24month review",
+      "doc_id": "rbi_kyc_2016",
+      "pattern": "reviewed after twenty-four months"
+    }
+  ],
+  "kyc_beneficial_owner": [
+    {
+      "fact": "ownership threshold",
+      "doc_id": "rbi_kyc_2016",
+      "pattern": "more than 10 percent of the shares or capital or profits of the company"
+    },
+    {
+      "fact": "independent control route",
+      "doc_id": "rbi_kyc_2016",
+      "pattern": "controlling ownership interest or who exercise control through other means"
+    },
+    {
+      "fact": "director-appointment control",
+      "doc_id": "rbi_kyc_2016",
+      "pattern": "right to appoint majority of the directors"
+    }
+  ],
+  "msme_collateral": [
+    {
+      "fact": "mandatory20lakh waiver",
+      "doc_id": "rbi_msme_2017",
+      "pattern": "not to accept collateral security.{0,80}20 lakh"
+    },
+    {
+      "fact": "25lakh discretionary condition",
+      "doc_id": "rbi_msme_2017",
+      "pattern": "good track record and financial position"
+    },
+    {
+      "fact": "internal policy condition",
+      "doc_id": "rbi_msme_2017",
+      "pattern": "25 lakh as per their internal policy"
+    },
+    {
+      "fact": "effective date",
+      "doc_id": "rbi_msme_2017",
+      "pattern": "on or after April 01, 2026"
+    }
+  ],
+  "ra_outsourcing": [
+    {
+      "fact": "core/compliance prohibition",
+      "doc_id": "sebi_research_analysts_2026",
+      "pattern": "outsource their core business activities and compliance functions"
+    }
+  ],
+  "mf_instant_access": [
+    {
+      "fact": "eligiblefundsinvestors",
+      "doc_id": "sebi_mutual_funds_2026",
+      "pattern": "Overnight and Liquid Schemes of the MF only for resident individual investors"
+    },
+    {
+      "fact": "monetarylimit",
+      "doc_id": "sebi_mutual_funds_2026",
+      "pattern": "50,?000.{0,10}90%"
+    },
+    {
+      "fact": "limitbasis",
+      "doc_id": "sebi_mutual_funds_2026",
+      "pattern": "per day per scheme per investor"
+    },
+    {
+      "fact": "noborrowing",
+      "doc_id": "sebi_mutual_funds_2026",
+      "pattern": "shall not borrow"
+    }
+  ],
+  "icdr_rights_process": [
+    {
+      "fact": "T+1 settlement",
+      "doc_id": "sebi_icdr_2026",
+      "pattern": "T\\+1 rolling settlement"
+    },
+    {
+      "fact": "tradingclosingtime",
+      "doc_id": "sebi_icdr_2026",
+      "pattern": "three working days prior to the closure"
+    },
+    {
+      "fact": "ASBAonly",
+      "doc_id": "sebi_icdr_2026",
+      "pattern": "only through ASBA facility"
+    },
+    {
+      "fact": "withdrawalprohibited",
+      "doc_id": "sebi_icdr_2026",
+      "pattern": "No withdrawal of application"
+    }
+  ],
+  "sse_zczp_thresholds": [
+    {
+      "fact": "issuesizemin",
+      "doc_id": "sebi_social_stock_exchange_2026",
+      "pattern": "minimum issue size shall be rupees fifty lakhs"
+    },
+    {
+      "fact": "applicationmin",
+      "doc_id": "sebi_social_stock_exchange_2026",
+      "pattern": "minimum application size.{0,40}one thousand"
+    },
+    {
+      "fact": "subscriptionmin",
+      "doc_id": "sebi_social_stock_exchange_2026",
+      "pattern": "minimum subscription.{0,50}75%"
+    },
+    {
+      "fact": "refundbelow75",
+      "doc_id": "sebi_social_stock_exchange_2026",
+      "pattern": "funds shall be refunded.{0,50}less than 75%"
+    },
+    {
+      "fact": "balancecapital",
+      "doc_id": "sebi_social_stock_exchange_2026",
+      "pattern": "manner of raising balance capital"
+    },
+    {
+      "fact": "socialimpact",
+      "doc_id": "sebi_social_stock_exchange_2026",
+      "pattern": "possible impact on achieving the social objective"
+    }
+  ],
+  "ncs_ebp_thresholds": [
+    {
+      "fact": "current20crinclusivegreenshoe",
+      "doc_id": "sebi_ncs_listing_2025",
+      "pattern": "single issue, inclusive of green shoe option.{0,30}20 crore"
+    },
+    {
+      "fact": "youngissueranysize",
+      "doc_id": "sebi_ncs_listing_2025",
+      "pattern": "irrespective of issue size.{0,70}less than three years"
+    },
+    {
+      "fact": "firsttime3days",
+      "doc_id": "sebi_ncs_listing_2025",
+      "pattern": "first time through EBP platform.{0,120}three working days"
+    }
+  ]
+}

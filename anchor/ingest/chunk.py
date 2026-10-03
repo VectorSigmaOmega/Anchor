@@ -1,107 +1,127 @@
+"""Structure-aware packing with a hard word bound and complete-block overlap."""
+
 from __future__ import annotations
 
 import re
 from hashlib import sha256
 
-from anchor.schemas import ChunkRecord, ParsedDocument
+from anchor.schemas import ChunkRecord, ParsedBlock, ParsedDocument
 
-TARGET_TOKENS = 450
-OVERLAP_TOKENS = 75
-WORD_RE = re.compile(r"\S+")
-
-
-def estimate_tokens(text: str) -> int:
-    return len(WORD_RE.findall(text))
-
-
-def tail_overlap(text: str, max_tokens: int) -> str:
-    words = WORD_RE.findall(text)
-    if len(words) <= max_tokens:
-        return text
-    return " ".join(words[-max_tokens:])
+CHUNKING_VERSION = "layout-structured-v2"
+MAX_WORDS = 450
+OVERLAP_WORDS = 75
+CLAUSE = re.compile(r"^(\d{1,3})(?:\.(\d+(?:\.\d+)*))?[.)]?\s+")
 
 
 def infer_heading_level(text: str) -> int:
     prefix = text.split(" ", 1)[0].rstrip(".)")
     if prefix and prefix[0].isdigit():
         return min(prefix.count(".") + 1, 4)
-    if prefix.isupper():
-        return 2
     return 2
 
 
-def emit_chunk(
-    chunks: list[ChunkRecord],
-    document_id: str,
-    section_path: str,
-    buffer: list[str],
-    page: int | None,
-) -> str:
-    text = " ".join(part.strip() for part in buffer if part.strip()).strip()
-    if not text:
-        return ""
-    content_hash = sha256(text.encode("utf-8")).hexdigest()
-    chunk = ChunkRecord(
-        chunk_id=f"{document_id}::chunk_{len(chunks):03d}",
-        doc_id=document_id,
-        chunk_index=len(chunks),
-        section_path=section_path,
-        page=page,
-        text=text,
-        content_sha256=content_hash,
-    )
-    chunks.append(chunk)
-    return text
+def split_block(block: ParsedBlock, *, structured: bool) -> list[ParsedBlock]:
+    limit = MAX_WORDS - OVERLAP_WORDS
+    if len(block.text.split()) <= limit:
+        return [block]
+    if block.block_type == "table":
+        rows = block.text.splitlines()
+        header = rows[0]
+        parts: list[str] = []
+        current = [header]
+        for row in rows[1:]:
+            if len(" ".join([*current, row]).split()) > limit and len(current) > 1:
+                parts.append("\n".join(current))
+                current = [header]
+            current.append(row)
+        parts.append("\n".join(current))
+    elif structured:
+        sentences = re.split(r"(?<=[.;])\s+(?=[A-Z(\d])", block.text)
+        parts = []
+        current = []
+        for sentence in sentences:
+            if len(" ".join([*current, sentence]).split()) > limit and current:
+                parts.append(" ".join(current))
+                current = []
+            current.append(sentence)
+        if current:
+            parts.append(" ".join(current))
+    else:
+        parts = [block.text]
+    result = []
+    for part in parts:
+        words = part.split()
+        for start in range(0, len(words), limit):
+            result.append(block.model_copy(update={"text": " ".join(words[start : start + limit])}))
+    return result
+
+
+def build_variant(parsed: ParsedDocument, strategy: str) -> list[ChunkRecord]:
+    if strategy not in {"fixed", "structured"}:
+        raise ValueError(strategy)
+    structured = strategy == "structured"
+    chunks: list[ChunkRecord] = []
+    headings = [parsed.document.title]
+    buffer: list[ParsedBlock] = []
+
+    def flush(overlap: bool = False) -> None:
+        nonlocal buffer
+        if not buffer:
+            return
+        text = "\n".join(b.text for b in buffer)
+        chunks.append(
+            ChunkRecord(
+                chunk_id=f"{parsed.document.doc_id}::{strategy}_{len(chunks):04d}",
+                doc_id=parsed.document.doc_id,
+                chunk_index=len(chunks),
+                section_path=" > ".join(headings[-4:]),
+                page=buffer[0].page,
+                text=text,
+                content_sha256=sha256(text.encode()).hexdigest(),
+            )
+        )
+        if not overlap:
+            buffer = []
+        elif structured:
+            # Carry complete trailing blocks when possible; never cut a table
+            # row or leave a sentence fragment as the sole overlap.
+            carry: list[ParsedBlock] = []
+            size = 0
+            for block in reversed(buffer):
+                if size + len(block.text.split()) > OVERLAP_WORDS:
+                    break
+                carry.insert(0, block)
+                size += len(block.text.split())
+            buffer = carry
+        else:
+            buffer = [buffer[-1].model_copy(update={"text": " ".join(text.split()[-OVERLAP_WORDS:])})]
+
+    for original in parsed.blocks:
+        if original.block_type == "heading":
+            flush()
+            level = infer_heading_level(original.text)
+            if re.match(r"^(?:chapter|annexure|annex|appendix|part)\b", original.text, re.I):
+                headings[:] = headings[:1]
+            else:
+                major = int(len(headings) > 1 and bool(re.match(
+                    r"^(?:chapter|annexure|annex|appendix|part)\b", headings[1], re.I,
+                )))
+                headings[:] = headings[:level + major]
+            headings.append(original.text)
+        for block in split_block(original, structured=structured):
+            size = sum(len(b.text.split()) for b in buffer)
+            clause = CLAUSE.match(block.text)
+            # Start a new top-level numbered clause when the current chunk is
+            # substantial, keeping subclauses/conditions in their parent's group.
+            if structured and clause and not clause.group(2) and size >= 150:
+                flush()
+                size = 0
+            if size + len(block.text.split()) > MAX_WORDS:
+                flush(overlap=True)
+            buffer.append(block)
+    flush()
+    return chunks
 
 
 def build_chunks(parsed: ParsedDocument) -> list[ChunkRecord]:
-    headings = [parsed.document.title]
-    chunks: list[ChunkRecord] = []
-    buffer: list[str] = []
-    buffer_tokens = 0
-    buffer_page: int | None = None
-
-    def current_section_path() -> str:
-        return " > ".join(headings[-4:])
-
-    def flush(*, carry_overlap: bool) -> None:
-        nonlocal buffer, buffer_tokens, buffer_page
-        text = emit_chunk(
-            chunks=chunks,
-            document_id=parsed.document.doc_id,
-            section_path=current_section_path(),
-            buffer=buffer,
-            page=buffer_page,
-        )
-        if carry_overlap and text:
-            overlap = tail_overlap(text, OVERLAP_TOKENS)
-            buffer = [overlap]
-            buffer_tokens = estimate_tokens(overlap)
-        else:
-            buffer = []
-            buffer_tokens = 0
-        buffer_page = None
-
-    for block in parsed.blocks:
-        if block.block_type == "heading":
-            if buffer:
-                flush(carry_overlap=False)
-            level = infer_heading_level(block.text)
-            headings[:] = headings[:level]
-            headings.append(block.text)
-            continue
-
-        block_tokens = estimate_tokens(block.text)
-        if not buffer:
-            buffer_page = block.page
-        if buffer and buffer_tokens + block_tokens > TARGET_TOKENS:
-            flush(carry_overlap=True)
-            if buffer and buffer_page is None:
-                buffer_page = block.page
-        buffer.append(block.text)
-        buffer_tokens += block_tokens
-
-    if buffer:
-        flush(carry_overlap=False)
-    return chunks
-
+    return build_variant(parsed, "structured")

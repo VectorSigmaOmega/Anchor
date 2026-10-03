@@ -9,6 +9,7 @@ from psycopg.types.json import Jsonb
 
 from anchor.config import Settings
 from anchor.db.pool import Database
+from anchor.ingest.chunk import CHUNKING_VERSION
 from anchor.pipeline.refusal import significant_terms
 from anchor.providers.gemini import ProviderError
 from anchor.schemas import ChatConversation, ChatMessage, ChunkRecord, ConversationTurn, DocumentRecord, QueryResponse, RetrievedChunk
@@ -24,6 +25,7 @@ class DocumentVersion:
     sha256: str
     is_active: bool
     chunk_count: int
+    chunking_version: str = "legacy-v1"
 
 
 @dataclass(slots=True)
@@ -125,11 +127,11 @@ class AnchorRepository:
         async with self.db.connection() as conn, conn.cursor() as cur:
             await cur.execute(
                 """
-                    SELECT d.sha256, d.is_active, COUNT(c.chunk_id) AS chunk_count
+                    SELECT d.sha256, d.is_active, d.chunking_version, COUNT(c.chunk_id) AS chunk_count
                     FROM documents d
                     LEFT JOIN chunks c ON c.doc_id = d.doc_id
                     WHERE d.doc_id = %s
-                    GROUP BY d.sha256, d.is_active
+                    GROUP BY d.sha256, d.is_active, d.chunking_version
                     """,
                 (doc_id,),
             )
@@ -140,6 +142,7 @@ class AnchorRepository:
                 sha256=row["sha256"],
                 is_active=row["is_active"],
                 chunk_count=row["chunk_count"],
+                chunking_version=row["chunking_version"],
             )
 
     async def upsert_document_chunks(
@@ -166,11 +169,11 @@ class AnchorRepository:
                     INSERT INTO documents (
                         doc_id, title, regulator, doc_type, source_url,
                         published_at, snapshot_date, sha256, is_active,
-                        version_label, topic_family, notes, updated_at
+                        version_label, topic_family, notes, chunking_version, updated_at
                     ) VALUES (
                         %(doc_id)s, %(title)s, %(regulator)s, %(doc_type)s, %(source_url)s,
                         %(published_at)s, %(snapshot_date)s, %(sha256)s, %(active)s,
-                        %(version_label)s, %(topic_family)s, %(notes)s, NOW()
+                        %(version_label)s, %(topic_family)s, %(notes)s, %(chunking_version)s, NOW()
                     )
                     ON CONFLICT (doc_id) DO UPDATE SET
                         title = EXCLUDED.title,
@@ -184,9 +187,10 @@ class AnchorRepository:
                         version_label = EXCLUDED.version_label,
                         topic_family = EXCLUDED.topic_family,
                         notes = EXCLUDED.notes,
+                        chunking_version = EXCLUDED.chunking_version,
                         updated_at = NOW()
                     """,
-                    document.model_dump(),
+                    {**document.model_dump(), "chunking_version": CHUNKING_VERSION},
                 )
                 await cur.execute("DELETE FROM chunks WHERE doc_id = %s", (document.doc_id,))
                 for chunk, embedding in zip(chunks, embeddings, strict=True):
@@ -218,6 +222,7 @@ class AnchorRepository:
     async def deactivate_documents_not_in(self, active_doc_ids: set[str]) -> int:
         async with self.db.connection() as conn:
             async with conn.cursor() as cur:
+                await cur.execute("SELECT pg_advisory_xact_lock(hashtext('anchor_embedding_maintenance'))")
                 await cur.execute(
                     """
                     UPDATE documents

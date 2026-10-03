@@ -2,6 +2,7 @@ import asyncio
 from datetime import date
 
 from anchor.db.repository import DocumentVersion
+from anchor.ingest.chunk import CHUNKING_VERSION
 from anchor.ingest.service import IngestionService
 from anchor.schemas import DocumentRecord, Manifest
 
@@ -35,7 +36,7 @@ class FakeRepository:
         return 2
 
     async def get_document_version(self, doc_id: str) -> DocumentVersion:
-        return DocumentVersion(sha256="a" * 64, is_active=True, chunk_count=1)
+        return DocumentVersion(sha256="a" * 64, is_active=True, chunk_count=1, chunking_version=CHUNKING_VERSION)
 
     async def finish_ingestion_run(self, *args, **kwargs):
         self.finished = kwargs
