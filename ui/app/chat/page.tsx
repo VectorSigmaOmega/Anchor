@@ -338,7 +338,7 @@ function AnswerContent({ response, messageId }: { response: QueryResponse; messa
           <p className="sources-label">Official sources</p>
           <ol className="sources">
             {citations.map((citation, index) => (
-              <li key={citation.chunk_id} id={`${sourcePrefix}-${index + 1}`} className="source">
+              <li key={`${sourcePrefix}-${index + 1}`} id={`${sourcePrefix}-${index + 1}`} className="source">
                 <span className="source-n">{index + 1}</span>
                 <span className="reg">{citation.regulator}</span>
                 <SourceReference citation={citation} />
@@ -354,13 +354,13 @@ function AnswerContent({ response, messageId }: { response: QueryResponse; messa
               Read supporting {count === 1 ? "excerpt" : "excerpts"}
             </summary>
             <div className="evidence-list">
-              {citations.map((citation) => {
+              {citations.map((citation, index) => {
                 const url = citationUrl(citation);
                 const location = citation.page
                   ? `Page ${citation.page}`
                   : "HTML source";
                 return (
-                  <figure key={citation.chunk_id} className="evidence">
+                  <figure key={`${sourcePrefix}-${index + 1}`} className="evidence">
                     <figcaption className="evidence-meta">
                       <span className="reg">{citation.regulator}</span>
                       {location}
