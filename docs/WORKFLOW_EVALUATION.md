@@ -6,6 +6,9 @@ in some coverage and calculations, alongside missed material facts, inconsistent
 claim verification and substantially higher token use. LangGraph provides the
 control flow; it does not make the underlying model a reliable judge.
 
+Remaining problems, proposed fixes, fallback approaches, and acceptance checks
+are tracked in the [response quality plan](RESPONSE_QUALITY_PLAN.md).
+
 ## Implementation
 
 Multipart Gemini requests can opt into a request-local StateGraph:
