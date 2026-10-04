@@ -265,7 +265,8 @@ claim-check controls address the previously observed omission and modal-wording
 failures; the user accepts longer answer time when real stage progress appears.
 This is a cautious inference from targeted controls, not a measured overall
 accuracy lift. The graph stays feature-flagged so production can revert to the
-ordinary route without changing the corpus. Before rollout: CI, production
+source-comparison linear route without changing the corpus; deployment passes
+through `LINEAR_SOURCE_COMPARISON_ENABLED` for that fallback. Before rollout: CI, production
 configuration, and browser smoke checks. After rollout: monitor real latency,
 provider errors, and answer samples, and disable the graph if those regress.
 
