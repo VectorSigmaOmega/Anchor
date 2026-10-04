@@ -266,7 +266,8 @@ failures; the user accepts longer answer time when real stage progress appears.
 This is a cautious inference from targeted controls, not a measured overall
 accuracy lift. The graph stays feature-flagged so production can revert to the
 source-comparison linear route without changing the corpus; deployment passes
-through `LINEAR_SOURCE_COMPARISON_ENABLED` for that fallback. Before rollout: CI, production
+through `LINEAR_SOURCE_COMPARISON_ENABLED` for that fallback and uses the same
+4,096-token answer cap as the evaluations. Before rollout: CI, production
 configuration, and browser smoke checks. After rollout: monitor real latency,
 provider errors, and answer samples, and disable the graph if those regress.
 
