@@ -865,7 +865,7 @@ export default function ChatConsole() {
     [activeConversationId, conversations],
   );
 
-  const messages = activeConversation?.messages ?? [];
+  const messages = useMemo(() => activeConversation?.messages ?? [], [activeConversation?.messages]);
 
   // Submit a landing-page handoff after server history has selected the target
   // conversation. `/chat?new=1&q=...` targets a fresh conversation.
@@ -905,18 +905,30 @@ export default function ChatConsole() {
     }
   }, [activeConversationId]);
 
-  // A just-asked question scrolls to the top of the reading column so the
-  // answer unfolds below it instead of yanking the view to the bottom.
+  // Keep the pending answer visible when a long question fills the reading
+  // column. Short questions still start at the top with the answer below.
   useEffect(() => {
     const targetId = pendingScrollRef.current;
     if (!targetId) {
       return;
     }
     pendingScrollRef.current = null;
-    scrollRef.current
-      ?.querySelector(`[data-mid="${targetId}"]`)
-      ?.scrollIntoView({ block: "start", behavior: "smooth" });
-  }, [messages.length]);
+    const scrollArea = scrollRef.current;
+    const target = scrollArea?.querySelector<HTMLElement>(`[data-mid="${targetId}"]`);
+    if (!scrollArea || !target) {
+      return;
+    }
+    const answer = target.classList.contains("turn-q")
+      ? target.nextElementSibling as HTMLElement | null
+      : target;
+    const answerOffset = answer
+      ? answer.getBoundingClientRect().top - target.getBoundingClientRect().top
+      : 0;
+    const visibleTarget = answer && answerOffset + 112 > scrollArea.clientHeight
+      ? answer
+      : target;
+    visibleTarget.scrollIntoView({ block: "start", behavior: "smooth" });
+  }, [messages]);
 
   // Land the cursor in the composer when a keyboard is the likely input.
   useEffect(() => {
@@ -1178,6 +1190,7 @@ export default function ChatConsole() {
       return;
     }
 
+    pendingScrollRef.current = messageId;
     updateAssistantMessage(activeConversation.id, messageId, {
       content: "",
       response: undefined,
