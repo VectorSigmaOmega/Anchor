@@ -198,6 +198,56 @@ async def test_multipart_search_keeps_deposit_evidence_when_fee_results_dominate
     generation.plan_retrieval_questions.assert_awaited_once()
 
 
+async def test_linear_progress_reports_only_started_stages():
+    settings = Settings(_env_file=None, database_url="postgresql://unused")
+    service = QueryService(settings=settings, repository=FakeRepository(), embedding_provider=FakeEmbeddingProvider(),
+                           generation_provider=FakeGenerationProvider(), rerank_provider=FakeRerankProvider(),
+                           tracer=Tracer(settings), metrics=Metrics("linear_progress_test"))
+    stages = []
+
+    result = await service.execute("What customer due diligence must banks perform?", on_progress=stages.append)
+
+    assert result.response.status == "answered"
+    assert stages == ["searching", "drafting", "checking"]
+
+
+async def test_linear_source_comparison_passes_only_source_linked_differences_to_draft(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from anchor.pipeline.workflow import EvidenceReview
+    from anchor.providers.workflow import GeminiWorkflowProvider
+
+    class RecordingGeneration(FakeGenerationProvider):
+        retry_note = None
+
+        async def generate(self, *, question, context_chunks, retry_note=None):
+            self.retry_note = retry_note
+            return await super().generate(question=question, context_chunks=context_chunks, retry_note=retry_note)
+
+    async def compare(self, question, requirements, context_chunks, *, review_topics):
+        assert not review_topics
+        assert len(requirements) == 2
+        assert context_chunks
+        self.last_usage_metadata = {"promptTokenCount": 12}
+        return EvidenceReview(missing_searches=[], limitations=[], findings=[],
+                              differences=["Unresolved source comparison: differing limits [E1] [E2]"])
+
+    monkeypatch.setattr(GeminiWorkflowProvider, "assess_evidence", compare)
+    settings = Settings(_env_file=None, database_url="postgresql://unused",
+                        linear_source_comparison_enabled=True)
+    generation = RecordingGeneration()
+    generation.plan_retrieval_questions = AsyncMock(return_value=["Compare one duty", "Compare another duty"])
+    service = QueryService(settings=settings, repository=FakeRepository(), embedding_provider=FakeEmbeddingProvider(),
+                           generation_provider=generation, rerank_provider=FakeRerankProvider(),
+                           tracer=Tracer(settings), metrics=Metrics("linear_source_comparison_test"))
+    result = await service.execute(
+        "Under the RBI KYC Direction, (1) what due diligence must banks perform before opening accounts? "
+        "(2) what customer identification and verification steps apply?"
+    )
+    assert result.response.status == "answered"
+    assert generation.retry_note == "Unresolved source comparison: differing limits [E1] [E2]"
+
+
 async def test_ordinary_question_does_not_add_a_paid_planning_call():
     from unittest.mock import AsyncMock
 
@@ -600,3 +650,51 @@ async def test_workflow_cannot_return_draft_after_persistent_claim_failure(monke
     assert result.response.answer == ""
     assert result.response.citations == []
     assert WorkflowProvider.generations == 2
+
+
+async def test_workflow_followup_keeps_context_and_adds_nearby_source(monkeypatch):
+    from anchor.pipeline.workflow import AnswerReview, EvidenceReview
+
+    class NearbyRepository(FakeRepository):
+        anchor_ids = None
+
+        async def nearby_lexical_search(self, question, anchor_chunk_ids, *, radius, limit):
+            self.anchor_ids = anchor_chunk_ids
+            return [RetrievedChunk(chunk_id="footnote", doc_id="rbi_kyc_2016", doc_title="KYC Direction",
+                                   regulator="RBI", section_path="CDD footnote", page=15,
+                                   text="The amendment applies from April 1.", source_url="https://example.com/kyc",
+                                   lexical_score=0.7)]
+
+    class WorkflowProvider(FakeGenerationProvider):
+        last_usage_metadata = {}
+        reviews = 0
+
+        def __init__(self, settings):
+            pass
+
+        async def plan_retrieval_questions(self, question):
+            return ["RBI identification", "RBI account opening"]
+
+        async def assess_evidence(self, question, requirements, context):
+            type(self).reviews += 1
+            return EvidenceReview(missing_searches=["amendment effective date"] if type(self).reviews == 1 else [],
+                                  limitations=[], findings=[])
+
+        async def verify_answer(self, question, requirements, draft, context, findings, differences):
+            return AnswerReview(issues=[])
+
+    monkeypatch.setattr("anchor.providers.workflow.GeminiWorkflowProvider", WorkflowProvider)
+    settings = Settings(_env_file=None, database_url="postgresql://test", multipart_workflow_enabled=True)
+    repository = NearbyRepository()
+    service = QueryService(settings=settings, repository=repository, embedding_provider=FakeEmbeddingProvider(),
+                           generation_provider=FakeGenerationProvider(), rerank_provider=FakeRerankProvider(),
+                           tracer=Tracer(settings), metrics=Metrics("anchor_workflow_neighbor_test"))
+    stages = []
+    result = await service.execute("(1) What identification is required under RBI KYC? "
+                                   "(2) What must banks do before opening accounts?", on_progress=stages.append)
+    assert result.response.status == "answered"
+    assert "chunk-001" in repository.anchor_ids
+    assert len(repository.anchor_ids) <= 2
+    assert {chunk.chunk_id for chunk in result.context_chunks} >= {"chunk-001", "footnote"}
+    assert WorkflowProvider.reviews == 2
+    assert stages == ["planning", "searching", "reviewing", "expanding", "reviewing", "drafting", "checking"]

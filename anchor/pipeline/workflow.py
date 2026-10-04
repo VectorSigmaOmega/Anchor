@@ -11,8 +11,9 @@ from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
 
 from anchor.pipeline.citations import validate_and_hydrate_citations
+from anchor.providers.evidence import source_excerpts
 from anchor.providers.gemini import MalformedModelOutputError
-from anchor.schemas import ModelQueryResponse, RetrievedChunk
+from anchor.schemas import ModelCitation, ModelQueryResponse, RetrievedChunk
 
 
 class EvidenceReview(BaseModel):
@@ -48,6 +49,17 @@ MONEY_RE = re.compile(r"(?:Rs\.?|₹)\s*(\d[\d,]*(?:\.\d+)?)\s*(crore|lakh|thous
 PERIOD_RE = re.compile(r"\b(\d+(?:\.\d+)?|one|two|three|four|five|six|twelve|eighteen)\s*[- ]\s*"
                        r"(working\s+days?|days?|months?|quarters?|years?)\b", re.I)
 PERCENT_RE = re.compile(r"\b(\d+(?:\.\d+)?)\s*(?:%|per\s*cent|percent)\b", re.I)
+UNRESOLVED_DISCLOSURE_RE = re.compile(
+    r"\b(?:unresolved|inconsisten\w*|discrepan\w*|conflict\w*|cannot\s+(?:determine|reconcile|establish)"
+    r"|unclear\s+which|do(?:es)?\s+not\s+establish\s+which)\b", re.I,
+)
+DISCRETION_ISSUE_PREFIX = "Preserve the source's discretion instead of stating an automatic outcome: "
+UNRESOLVED_ISSUE = ("The supplied excerpts contain an unresolved comparison. State both explicit source rules "
+                    "with citations and explain that the supplied evidence does not establish which controls.")
+AUTOMATIC_VERB_RE = re.compile(
+    r"\b(?:(?:is|are|will be|shall be|must be)\s+(?:automatically\s+)?"
+    r"(levied|charged|paid|reimbursed|granted|imposed|deducted|incurred)|(incurs?))\b", re.I,
+)
 NUMBER_WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "twelve": 12, "eighteen": 18}
 
 
@@ -76,6 +88,56 @@ def missing_proposal_values(question: str, answer: str) -> list[str]:
             proposals.update(quantity_mentions(sentence))
     answered = quantity_mentions(answer)
     return [label for value, label in proposals.items() if value not in answered]
+
+
+def soften_discretionary_claims(answer: str, issues: list[str]) -> str | None:
+    if not issues or any(not issue.startswith(DISCRETION_ISSUE_PREFIX) for issue in issues):
+        return None
+    revised = answer
+    for issue in issues:
+        claim = issue.removeprefix(DISCRETION_ISSUE_PREFIX)
+        if claim not in revised:
+            return None
+        softened = AUTOMATIC_VERB_RE.sub(
+            lambda match: "may be " + match[1].lower() if match[1] else "may incur",
+            claim, count=1,
+        )
+        if softened == claim:
+            return None
+        revised = revised.replace(claim, softened, 1)
+    return revised
+
+
+def append_unresolved_comparisons(draft: ModelQueryResponse, differences: list[str],
+                                  context: list[RetrievedChunk], max_citations: int) -> ModelQueryResponse | None:
+    """Show the exact indexed source references when a repair drops an unresolved comparison."""
+    _, evidence = source_excerpts(context)
+    citations = list(draft.citations)
+    citation_numbers = {(citation.chunk_id, citation.quote): index
+                        for index, citation in enumerate(citations, 1)}
+    paragraphs = []
+    for difference in differences:
+        if not difference.startswith("Unresolved source comparison:"):
+            continue
+        ids = list(dict.fromkeys(re.findall(r"\[(E\d+)\]", difference)))
+        if len(ids) < 2 or any(eid not in evidence for eid in ids):
+            return None
+        provisions = []
+        for eid in ids:
+            item = evidence[eid]
+            key = (item["chunk_id"], item["quote"])
+            if key not in citation_numbers:
+                citations.append(ModelCitation(**item))
+                citation_numbers[key] = len(citations)
+            provisions.append(f'“{item["quote"]}” [{citation_numbers[key]}]')
+        paragraphs.append("The indexed provisions give different stated limits for this requirement: "
+                          + " Compared with: ".join(provisions)
+                          + ". The available material does not establish which provision controls; any single "
+                          "limit stated above for this requirement is unresolved.")
+    if not paragraphs or len(citations) > max_citations:
+        return None
+    return draft.model_copy(update={"answer": draft.answer.rstrip() + "\n\n" + "\n\n".join(paragraphs),
+                                    "citations": citations})
 
 
 class MultipartWorkflow:
@@ -156,16 +218,47 @@ class MultipartWorkflow:
             issues = ["Invalid source citations or response format. Use only the supplied excerpt references; keep refusals empty."]
         elif not state["context"]:
             issues = []
-        elif draft.status == "answered" and (missing := missing_proposal_values(state["question"], draft.answer)):
-            issues = ["Assess the user's proposed amount or period explicitly, naming it and giving a supported verdict: "
-                      + value for value in missing[:8]]
         else:
-            try:
-                review = await self.verify(state["question"], state["requirements"], draft, state["context"],
-                                           state.get("findings", []), state.get("differences", []))
-                issues = review.issues
-            except MalformedModelOutputError:
-                issues = ["The claim review could not be validated. Recheck each claim against the current official evidence."]
+            issues = []
+            if draft.status == "answered":
+                issues.extend("Assess the user's proposed amount or period explicitly, naming it and giving a "
+                              "supported verdict: " + value for value in missing_proposal_values(
+                                  state["question"], draft.answer)[:8])
+                if (any(item.startswith("Unresolved source comparison:") for item in state.get("differences", []))
+                        and not UNRESOLVED_DISCLOSURE_RE.search(draft.answer)):
+                    issues.append(UNRESOLVED_ISSUE)
+            if issues == [UNRESOLVED_ISSUE] and state.get("repaired"):
+                fallback = append_unresolved_comparisons(draft, state.get("differences", []), state["context"],
+                                                         self.max_citations)
+                if fallback is not None:
+                    valid, _ = validate_and_hydrate_citations(fallback, state["context"],
+                                                               max_rendered=self.max_citations)
+                    if valid:
+                        try:
+                            review = await self.verify(state["question"], state["requirements"], fallback,
+                                                       state["context"], state.get("findings", []),
+                                                       state.get("differences", []))
+                            if not review.issues:
+                                return {"draft": fallback, "issues": [], "verified": True}
+                        except MalformedModelOutputError:
+                            pass
+            if not issues:
+                try:
+                    review = await self.verify(state["question"], state["requirements"], draft, state["context"],
+                                               state.get("findings", []), state.get("differences", []))
+                    issues = review.issues
+                    if issues and state.get("repaired") and (softened := soften_discretionary_claims(draft.answer, issues)):
+                        softened_draft = draft.model_copy(update={"answer": softened})
+                        valid, _ = validate_and_hydrate_citations(softened_draft, state["context"],
+                                                                   max_rendered=self.max_citations)
+                        if valid:
+                            followup = await self.verify(state["question"], state["requirements"], softened_draft,
+                                                         state["context"], state.get("findings", []),
+                                                         state.get("differences", []))
+                            if not followup.issues:
+                                return {"draft": softened_draft, "issues": [], "verified": True}
+                except MalformedModelOutputError:
+                    issues = ["The claim review could not be validated. Recheck each claim against the current official evidence."]
         return {"issues": issues, "verified": not issues}
 
     async def repair(self, state: WorkflowState):
@@ -175,6 +268,8 @@ class MultipartWorkflow:
         note += (
             "\nUse source 'may' wording explicitly for discretionary outcomes. A calculated 'up to' limit is a maximum "
             "eligible amount, not a guaranteed amount received. Disclose both incompatible explicit source requirements. "
+            "Cite regulatory rules only with supplied [E-number] IDs; do not attach bracketed labels such as "
+            "[User prompt] to facts provided by the user. "
             "If a claim is unsupported, remove it or explicitly state that the relevant part cannot be established."
         )
         return {**await self.draft(state, note), "repaired": True}

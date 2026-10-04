@@ -963,6 +963,35 @@ a:hover {
   color: var(--color-text-secondary);
 }
 
+.progress-panel {
+  display: grid;
+  gap: var(--space-3);
+  max-width: 32rem;
+}
+
+.progress-events {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0 0 0 var(--space-5);
+  border-left: 1px solid var(--color-border-strong);
+  list-style: none;
+}
+
+.progress-events li {
+  position: relative;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+}
+
+.progress-events li::before {
+  position: absolute;
+  left: calc(-1 * var(--space-5) - 4px);
+  content: "✓";
+  color: var(--color-success);
+}
+
 .hero {
   display: grid;
   place-items: center;
@@ -1158,12 +1187,14 @@ a:hover {
     inset: 0 auto 0 0;
     z-index: 50;
     width: min(var(--width-sidebar), 84vw);
+    visibility: hidden;
     transform: translateX(-100%);
     box-shadow: var(--shadow-lg);
     transition: transform var(--duration-slow) var(--ease);
   }
 
   .workspace[data-open="true"] .side {
+    visibility: visible;
     transform: translateX(0);
   }
 

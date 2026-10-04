@@ -4,10 +4,10 @@ Updated: 4 October 2026. Owner: Codex with Abhinash.
 
 This file tracks the remaining work, the first approach to each problem, how to
 judge the result, and a backup if the first approach fails. Proposed changes below
-are tracked separately from the implementation status. Several first approaches
-are implemented on the disabled workflow branch, but none has passed the release
-gate. Status changes must link to code and recorded results; implementing a change
-is not the same as resolving its problem.
+are tracked separately from the implementation status. The candidate has passed
+the limited local release checks described below; CI and production checks are
+still pending. Status changes must link to code and recorded results;
+implementing a change is not the same as resolving its problem.
 
 ## Starting point
 
@@ -21,31 +21,36 @@ is not the same as resolving its problem.
   results are summarized below and stored in ignored `.benchmarks/workflow/`
   artifacts. Replay reuses old retrieved passages, so its timings exclude fresh
   retrieval, embedding, and reranking.
-- The 161 passing software tests establish software behavior, not factual
+- The software tests establish software behavior, not factual
   correctness. The 27 ordinary regression checks and five complex comparison
   questions provide limited evidence of answer quality.
 - **Frozen development cases:** `eval/workflow_quality.jsonl` (five cases), SHA-256
   `2a287f6d2be34388a6f61b4ba85fa060426620b8cc678415eab78af9fce652`.
   They may guide implementation and become regression tests.
-- **Frozen held-out cases:** `eval/workflow_holdout.jsonl` (ten new scenarios across
-  KYC, mutual funds, ICDR, SSE, NCS, and one outside-corpus request), SHA-256
-  `50bd21200d517631cd64fad3f2e16d999c223e957cec4e12891f0d5153bdb695`.
-  Its `must_include`, `must_not_claim`, and source page fields are the review
-  rubric. Its empty regex-pattern lists intentionally avoid treating keywords as
-  semantic grades. Do not inspect candidate answers or tune against these cases
-  before the final development-case gate.
+- **Initial held-out cases:** `eval/workflow_holdout.jsonl` (ten scenarios),
+  SHA-256 `50bd21200d517631cd64fad3f2e16d999c223e957cec4e12891f0d5153bdb695`.
+  The first candidate run exposed a false refusal on `holdout_ncs_first_time`;
+  that question is now a regression case. **Revised held-out set:**
+  `eval/workflow_holdout_v3.jsonl`, SHA-256
+  `d92aa1da6c2f21082b5a36e82434b1b0cad956eea185d810da68cf5e6f804b0e`,
+  replaces it with an LODR deadline scenario whose first-quarter scope is
+  explicit. The remaining nine
+  questions are unchanged and already seen in the initial run; disclose this
+  limitation when reporting generalisation. `must_include`, `must_not_claim`,
+  and source page fields are the review rubric; empty regex-pattern lists
+  intentionally avoid treating keywords as semantic grades.
 
 ## Work list
 
 | ID | Problem | Status | First approach | Backup |
 | --- | --- | --- | --- | --- |
-| P1 | Incorrect assertions pass verification | In progress; clause checks and one live corrupted-claim control pass | Check each independent assertion against its own source rule | Render difficult parts directly from verified source records/excerpts |
-| P2 | Relevant obligations and requested details disappear | In progress; focused reviews, sectioned answers, and proposal-value guard implemented | Dynamic review tasks with obligation and answer coverage checks | Answer requested parts separately, then assemble without resummarizing |
-| P3 | Differing provisions are overlooked or incorrectly reconciled | In progress; pair comparison and scope labeling implemented | Compare rules about the same activity and applicable scope | Present unresolved source provisions side by side with citations |
-| P4 | Relevant passages exist but are not selected | In progress; follow-up retrieval re-reviewed, neighboring/reference expansion pending | Targeted follow-up retrieval and nearby/reference expansion | Retrieve a bounded parent section with lexical and document-aware search |
-| P5 | Extra calls increase cost, latency, and capacity pressure | Open; current candidate exceeds latency/token targets | Reduce duplicated context/calls and measure per-stage usage | Use a simpler evidence-first path and restrict costly reviews to unresolved parts |
-| P6 | Evaluation is too narrow to establish generalisation | In progress; five development replays inspected, held-out set frozen and untouched | Freeze source-reviewed development and held-out sets | Narrow rollout scope and retain source-reviewed/manual release checks |
-| P7 | Remaining UI states need refinement and verification | Pending audit; no new defect claimed | Test loading, citations, errors, partial answers, and responsive behavior | Use a simpler answer/status/source presentation if richer interactions fail |
+| P1 | Incorrect assertions pass verification | Validated locally on focused corruption controls and source-reviewed answers; broader accuracy unproven | Check each independent assertion against its own source rule | Render difficult parts directly from verified source records/excerpts |
+| P2 | Relevant obligations and requested details disappear | Validated locally on undertaking-omission control and five development cases; broader completeness unproven | Dynamic review tasks with obligation and answer coverage checks | Answer requested parts separately, then assemble without resummarizing |
+| P3 | Differing provisions are overlooked or incorrectly reconciled | Validated locally on RA advance-period and historical-footnote regressions; cross-document precedence remains unresolved where sources do not establish it | Compare rules about the same activity and applicable scope | Present unresolved source provisions side by side with citations |
+| P4 | Relevant passages exist but are not selected | Validated locally on a withheld-footnote control; five development questions avoided unnecessary follow-up searches | Targeted follow-up retrieval and nearby/reference expansion | Retrieve a bounded parent section with lexical and document-aware search |
+| P5 | Extra calls increase cost, latency, and capacity pressure | Five-case full workflow median 21.91 s and 275,161 generation input tokens versus 10.73 s and 45,547 for the source-comparison linear path; live progress implemented; production capacity pending | Reduce duplicated context/calls and measure per-stage usage | Use a simpler evidence-first path and restrict costly reviews to unresolved parts |
+| P6 | Evaluation is too narrow to establish generalisation | Three repeated revised held-out runs met all written expectations on both routes; only one of ten questions used the graph, nine were previously seen, and production remains unchecked | Freeze source-reviewed development and held-out sets | Narrow rollout scope and retain source-reviewed/manual release checks |
+| P7 | Remaining UI states need refinement and verification | Live SSE stage events, cancellation, mobile navigation, failure/refusal actions and landing metrics pass local checks; production smoke check pending | Test loading, citations, errors, partial answers, and responsive behavior | Use a simpler answer/status/source presentation if richer interactions fail |
 
 ## Development checkpoint (4 October 2026)
 
@@ -98,6 +103,175 @@ the simpler P5 path against the same development cases, improve P4 passage
 coverage only where retrieval evidence shows a miss, then perform a fresh
 end-to-end comparison before opening the held-out set. P7 follows a workflow
 that can meet the live site's latency and quality requirements.
+
+## New development checkpoint (4 October 2026)
+
+The disabled workflow now bounds long-answer claim checks into 12-claim batches,
+adds a separate full-answer coverage review, rechecks disputed claims against
+focused source text, and preserves server-held citations when a repair fails.
+Its follow-up search can add at most four lexically relevant chunks near existing
+source anchors. A direct indexed-source probe recovered the MSME effective-date
+footnote two chunks away; this does not yet prove that the full workflow chooses
+to perform a follow-up when that footnote is missing. Full topic reviews still
+consume too many tokens and can exceed the site's current timeout.
+
+The P5 backup is now the better-performing **development candidate**: use Gemini
+3.5 Flash Lite for retrieval planning and Gemini 3.8 Flash for the final answer.
+The linear answer prompt and planner were rewritten to use general actor, duty,
+scope, scenario-value, and conflict instructions. The IA/RA-specific hints and
+advance-fee detector were removed. On one fresh end-to-end run of the five frozen
+development questions, all five were answered, median latency was 7.57 seconds,
+and generation input totalled 40,736 tokens
+(`.benchmarks/workflow/answers-linear-generic38-v3-endtoend.jsonl`). Manual
+inspection found the requested calculations and duties, the currency-chest
+discretion, the distinct RTA/issuer deadlines, and both RA advance periods.
+The IA/RA answer calls them a textual divergence but does not explicitly say
+which period controls remains unresolved. Its old keyword screen flags this as
+missing `inconsisten|discrepan|conflict`; the answer still needs semantic review.
+These are **one-run development results**, not held-out evidence or a production
+decision. A preceding run with 3.8 Flash as planner hit the 25-second application
+budget on two of five questions; the Lite planner avoided those outliers in the
+single matched run. The held-out set remains untouched.
+
+The full software suite now passes 176 tests and Ruff passes. Next: run varied
+corrupted-answer controls for P1, verify the effective-date end-to-end probe and
+other retrieval misses, then repeat the source-reviewed development evaluation.
+Only after that gate should the frozen held-out set be opened. P7 and deployment
+remain pending.
+
+## Paused checkpoint (4 October 2026)
+
+Implementation is paused on the draft branch; it has not been merged or deployed.
+The optional linear comparison is off by default. Its first five-case run answered
+all questions but did not surface the known RA advance-fee difference during the
+comparison stage: two less relevant numeric pairs used its two-pair budget.
+A generic ranking change now prefers comparisons between different source chunks.
+The second fresh end-to-end run answered all five development questions, with a
+10.55-second median and 47,287 generation-input tokens
+(`.benchmarks/workflow/answers-linear-compare38-v2-endtoend.jsonl`). Its comparison
+stage identified the RA one-year versus one-quarter provisions and returned no
+differences for the other four cases. The IA/RA answer explicitly states that the
+provided excerpts do not establish precedence. One run is not a reliability or
+generalisation result.
+
+Other completed checks: six live verifier corruption/valid-answer controls pass;
+a separate coverage pass caught the omitted undertaking in a live repeat; a
+direct indexed-source probe recovered the MSME effective-date footnote, and one
+end-to-end question cited it correctly. A second generic linear run answered all
+five cases; another answered four and failed once at the Cohere request. These
+remain limited development checks, not release grades. The UI fixes were checked
+locally at 360, 768, 1100, and 1440 px, including mobile keyboard navigation,
+long citations, and error/refusal actions; `npm run lint` and `npm run build`
+passed. The backend suite passed 179 tests; Ruff and `git diff --check` passed.
+
+**Remaining gates:** (1) inspect the new answers against source text and repeat
+the generic comparison with negative and changed-scope controls; (2) resolve or
+bound Cohere failures and tail latency without masking provider errors as corpus
+refusals; (3) evaluate passage-recovery misses where initial retrieval lacks the
+needed clause; (4) run the frozen ten-case held-out set once, source-review its
+answers and compare quality, latency, and cost with the current linear route;
+(5) finish UI rate-limit/error checks, then update this tracker and the draft PR.
+Only enable a production path that passes these gates. If comparison remains
+unreliable, use the P3 side-by-side cited-source fallback; if workflow calls are
+too slow, retain the simpler linear route and limit extra review to uncertain
+parts.
+
+## Resumed development checkpoint (4 October 2026)
+
+The full LangGraph candidate now checks reviewer-reported gaps against the
+complete selected context before follow-up retrieval. In a controlled end-to-end
+probe that withheld an indexed MSME effective-date footnote on the first pass,
+it searched again, recovered the footnote, and cited the effective date. The
+previous rule that searched for every tentative reviewer limitation had caused
+an unnecessary second retrieval in all five development cases. The revised
+candidate used one retrieval on each of those five cases and answered all five.
+The old IA/RA keyword pattern still flags equivalent wording such as “the
+excerpts do not establish which provision controls”; inspect that answer
+semantically rather than treating the keyword screen as a grade.
+
+The five-case full-workflow run had a 21.91-second median, 275,161 generation
+input tokens, and an estimated $0.188 Gemini generation cost using published
+model prices (`.benchmarks/workflow/answers-workflow-mixed-v3-adjudicated.jsonl`).
+That estimate excludes embeddings, reranking, and any billing differences.
+One IA/RA run omitted an explicit unresolved-precedence statement even though
+it cited both periods. Bounded comparison now reserves a candidate for a
+different quantity kind when fee-amount pairs otherwise occupy both slots.
+Two focused live IA/RA reruns disclosed the one-year versus one-quarter
+provisions and the lack of established precedence. A spelling variant in the
+disclosure detector was fixed to avoid adding a duplicate fallback paragraph.
+
+The chat now streams actual stage transitions from the backend, including
+planning, retrieval, evidence review, follow-up retrieval, drafting, and claim
+checks. A local browser run displayed those transitions before a cited answer;
+the stream, cancellation, error, rate-limit, and cookie paths have software
+tests. The TLS nginx route now disables proxy buffering and allows 75 seconds;
+the application allows 60 and the browser 90. User accepted a longer answer
+time when the workflow's progress is visible. The previous provisional
+12-second median target is therefore diagnostic rather than a release gate.
+The backend suite passes 196 tests; Ruff, UI lint/build, and `git diff --check`
+pass. Production remains unchanged. The ten-case held-out comparison has begun
+only after these development checks; its result and release decision remain open.
+
+The first held-out run answered nine questions and falsely refused the NCS
+first-time-issuer question. The matched linear comparison answered all ten.
+The NCS source-review pair received an excerpt starting in the middle of a
+historical footnote, so it did not see the preceding “prior to substitution”
+statement and treated the old five-working-day deadline as a live conflict.
+Giving pair comparison the bounded containing chunk restored that context; the
+NCS question then answered in one live regression run. This fix applies to
+historical and scoped notes generally, not an NCS-specific branch. The new
+ten-case set replaces that regression question with an LODR deadline question;
+its SHA-256 is recorded above. The first held-out run also exposed an apparent
+ICDR T+1 versus RTA T+2 difference: both indexed excerpts explicitly describe
+rights-entitlement trading, so the answers correctly report the unresolved
+cross-document difference instead of choosing precedence. Production remains
+unchanged while the revised set is evaluated.
+
+## Local release comparison (4 October 2026)
+
+The revised ten-case set was run three times through each route with the same
+Gemini 3.8 Flash final-answer model and Gemini 3.5 Flash Lite planner. The
+`linear_compare` route retains a bounded source-comparison call for multipart
+questions; it skips the graph's topic review, coverage, and claim checks.
+
+| Route | Runs meeting written case expectations | Median seconds per ten-case run | Gemini generation input tokens per run | Artifacts |
+| --- | --- | --- | --- | --- |
+| Graph for multipart questions | 10/10, 10/10, 10/10 | 4.58, 4.80, 4.43 | 87,894; 84,909; 91,009 | `.benchmarks/workflow/holdout-v3-workflow-r{1,2,3}.jsonl` |
+| Linear with source comparison | 10/10, 10/10, 10/10 | 4.60, 4.77, 4.63 | 39,094; 38,798; 38,263 | `.benchmarks/workflow/holdout-v3-linear-r{1,2,3}.jsonl` |
+
+Nine questions took the ordinary route on both paths; only the KYC small-account
+question triggered multipart routing. The similar held-out outcomes therefore
+do not demonstrate a graph quality advantage. These were rubric and source-spot
+checks, not an independent expert grade. Nine questions were also already seen
+after the first held-out gate. The old NCS false-refusal case answered correctly
+in three consecutive live graph runs after the full-chunk context fix
+(`.benchmarks/workflow/ncs-first-time-regression-v{2,3,4}-context.jsonl`).
+The fix exposes historical supersession text to the comparison step; no
+NCS-specific handling was added.
+
+The five complex development cases exercised the graph and source-comparison
+linear route end to end. The graph's median was 21.91 seconds and used 275,161
+Gemini generation input tokens; the linear route's median was 10.73 seconds and
+used 45,547. Both routes answered all five. The IA/RA graph answer explicitly
+said the two RA advance-fee periods were unresolved, even though its legacy
+keyword screen flagged that wording. A fresh IA/RA and RTA/issuer graph rerun
+again answered and covered the requested duties, dates, fee limits and source
+differences (`.benchmarks/workflow/dev-complex-final-r1.jsonl`). This supports
+local correctness on the tested questions, not a broad superiority claim.
+
+The rollout choice is to use Gemini 3.8 Flash for ordinary answers and enable
+the bounded graph only for detected multipart questions. Its extra review and
+claim-check controls address the previously observed omission and modal-wording
+failures; the user accepts longer answer time when real stage progress appears.
+This is a cautious inference from targeted controls, not a measured overall
+accuracy lift. The graph stays feature-flagged so production can revert to the
+ordinary route without changing the corpus. Before rollout: CI, production
+configuration, and browser smoke checks. After rollout: monitor real latency,
+provider errors, and answer samples, and disable the graph if those regress.
+
+Local validation: 191 tests passed and 6 PostgreSQL integration checks skipped
+without a local PostgreSQL service; Ruff, UI lint/build, fixture smoke
+evaluation, and `git diff --check` passed. CI must run the database checks.
 
 ## Shared design for P1–P4
 
@@ -248,11 +422,14 @@ Batch or run independent reviews with a small concurrency limit and provider-awa
 pacing. Concurrency can reduce latency but does not itself reduce token cost.
 Measure actual bills when available; otherwise label token counts as a cost proxy.
 
-**Success check:** Initial engineering targets are aggregate generation input
-below twice the matched linear baseline and median latency below 12 seconds while
-meeting the quality checks. These are proposed targets, not user-approved spending
-limits or reported results. Record every timeout and tail latency; a small sample
-cannot establish a reliable p95. Keep explicit call/retry/context limits.
+**Success check:** The original engineering targets were aggregate generation
+input below twice the matched linear baseline and median latency below 12
+seconds while meeting quality checks. On 4 October, the user accepted longer
+answers when actual workflow stages are visible. Treat those numbers as cost and
+latency comparison points, not release blockers; quality, bounded expense,
+operational timeouts, and truthful progress still matter. Record every timeout
+and tail latency; a small sample cannot establish a reliable p95. Keep explicit
+call/retry/context limits.
 
 **Backup trigger:** Quality improves but duplicated work still exceeds those
 targets, or quota/timeout failures make the approach unsuitable for the site.
@@ -370,6 +547,9 @@ quality, cost, or usability introduced by a backup.
 | 2026-10-03 | P1–P7 | Created tracker from recorded failures and current code. No implementation or evaluation changes in this update. | Freeze the P6 evaluation criteria before revising the workflow. |
 | 2026-10-03 | P2, P3, P6 | Froze five development cases and ten new held-out scenarios. Implemented bounded source-focused reviews for each dynamically planned topic, source-ID validation, and review of any follow-up retrieval before drafting. Focused software tests passed; live semantic evaluation is in progress. | Inspect development-case answers and costs; keep held-out cases sealed until the approach passes that gate. |
 | 2026-10-04 | P1–P6 | Commit `c7fe4f5` adds sectioned drafting, proposal-value guard, clause review, source-pair scope checks, bounded topic reviews, and replay mode. Five selected development replays passed keyword screens and were manually inspected; one controlled discretionary claim test passed. The replay median is 15.35 seconds and the full IA/RA trial exceeded the proxy timeout. 161 tests and Ruff pass. Artifacts and limitations are above. | Keep the workflow disabled; try the P5 simpler path and verify P4 retrieval before any held-out or rollout gate. |
+| 2026-10-04 | P1–P6 | Uncommitted candidate adds bounded verifier batches, nearby lexical follow-up, generic linear prompt, and Lite retrieval planner option. One fresh five-case 3.8 Flash linear run answered all five at 7.57-second median and 40,736 generation-input tokens; 176 tests and Ruff pass. Held-out unopened. | Run corruption and retrieval controls, repeat semantic development review, then held-out/operational/UI gates. |
+| 2026-10-04 | P1–P7 | Resumed candidate adds full-context gap adjudication, quantity-diverse source comparisons, live workflow events, and proxy support. Withheld-footnote probe recovered the source; five development questions avoided false follow-ups at 21.91-second median and estimated $0.188 Gemini generation cost. Two focused IA/RA repeats disclosed the unresolved periods. Backend 196 tests, Ruff, UI lint/build pass. Frozen held-out run started after development gate. | Complete matched-model held-out comparison and source review; decide route, then production/browser smoke checks. |
+| 2026-10-04 | P1–P7 | Uncommitted candidate on `feat/bounded-multipart-workflow`: revised held-out SHA recorded above, graph and matched linear route each met 10/10 written expectations in three runs. NCS historical-footnote regression answered in three consecutive graph runs after full-chunk context fix. Five complex development cases answered on both routes; graph used about six times the generation input tokens and twice the median time. Fresh IA/RA and RTA graph checks remained source-consistent. 191 local tests passed, 6 database checks skipped; Ruff, UI lint/build, and fixture smoke passed. | Commit and run CI with PostgreSQL, configure feature flags, deploy, then source-review production samples and inspect browser states. |
 
 For each experiment, append its commit, model/index versions, dataset/split, artifact
 path, measured result, and decision. Use statuses: Open, In progress, Implemented

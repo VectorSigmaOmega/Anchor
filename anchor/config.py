@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     gemini_api_base_url: str = "https://generativelanguage.googleapis.com/v1beta/models"
     generation_model: str = "gemini-3.1-flash-lite"
     multipart_generation_model: str = "gemini-3.5-flash-lite"
+    workflow_draft_model: str | None = None
     generation_thinking_level: Literal["minimal", "low", "medium", "high"] = "minimal"
     embedding_model: str = "gemini-embedding-2"
     embedding_dimension: int = 768
@@ -44,8 +45,12 @@ class Settings(BaseSettings):
     max_query_chars: int = Field(default=4000, gt=0)
     max_completion_tokens: int = 2048
     multipart_workflow_enabled: bool = False
-    workflow_timeout_seconds: float = Field(default=35.0, gt=0)
+    linear_source_comparison_enabled: bool = False
+    retrieval_plan_model: str | None = None
+    workflow_topic_review_enabled: bool = True
+    workflow_timeout_seconds: float = Field(default=60.0, gt=0)
     multipart_max_completion_tokens: int = 4096
+    multipart_max_citations: int = 32
     multipart_context_top_k: int = 16
     multipart_rerank_candidate_count: int = 40
     max_citations: int = 24
@@ -60,6 +65,7 @@ class Settings(BaseSettings):
     rerank_min_support_count: int = 2
     cors_origin: str = "http://localhost:3000"
     request_timeout_seconds: float = 15.0
+    rerank_request_timeout_seconds: float = Field(default=7.0, gt=0)
     query_timeout_seconds: float = Field(default=25.0, gt=0)
     metrics_namespace: str = "anchor"
     session_cookie_name: str = "anchor_session"

@@ -1,6 +1,14 @@
 import asyncio
 
-from anchor.pipeline.workflow import AnswerReview, EvidenceReview, MultipartWorkflow, missing_proposal_values
+from anchor.pipeline.workflow import (
+    UNRESOLVED_DISCLOSURE_RE,
+    AnswerReview,
+    EvidenceReview,
+    MultipartWorkflow,
+    append_unresolved_comparisons,
+    missing_proposal_values,
+    soften_discretionary_claims,
+)
 from anchor.schemas import ModelCitation, ModelQueryResponse, RetrievedChunk
 
 
@@ -77,6 +85,48 @@ async def test_persistent_claim_failure_stops_after_one_repair():
     assert steps.verifications == 2
 
 
+def test_modal_softening_changes_only_the_disputed_claim():
+    text = "The ordinary rate applies. A flat penalty is levied [1]."
+    issue = "Preserve the source's discretion instead of stating an automatic outcome: A flat penalty is levied [1]."
+    assert soften_discretionary_claims(text, [issue]) == "The ordinary rate applies. A flat penalty may be levied [1]."
+    assert soften_discretionary_claims(text, [issue, "Unsupported amount"]) is None
+
+
+def test_unresolved_fallback_adds_both_server_held_citations():
+    first = chunk("Clients may pay fees in advance for one year.")
+    second = first.model_copy(update={"chunk_id": "c2", "text": "Clients may pay fees in advance for one quarter."})
+    draft = ModelQueryResponse(status="answered", answer="An advance fee is possible [1].",
+                               citations=[ModelCitation(chunk_id="c1", quote=first.text)])
+    revised = append_unresolved_comparisons(draft, ["Unresolved source comparison: periods differ [E1] [E2]"],
+                                             [first, second], 24)
+    assert revised is not None
+    assert "does not establish which provision controls" in revised.answer
+    assert "one year" in revised.answer and "one quarter" in revised.answer
+    assert "[1] Compared with:" in revised.answer and "[2]. The available material" in revised.answer
+    assert len(revised.citations) == 2
+
+
+async def test_persistent_modal_error_gets_one_checked_source_strength_fallback():
+    class ModalSteps(Steps):
+        async def generate(self, question, context, note):
+            self.notes.append(note)
+            return answer("A flat penalty is levied")
+
+        async def verify(self, question, requirements, draft, context, findings, differences):
+            self.verifications += 1
+            return AnswerReview(issues=[] if "may be levied" in draft.answer else [
+                "Preserve the source's discretion instead of stating an automatic outcome: "
+                "A flat penalty is levied [1]",
+            ])
+
+    steps = ModalSteps()
+    result = await steps.workflow().run("What may happen?")
+    assert result["verified"]
+    assert "may be levied" in result["draft"].answer
+    assert steps.verifications == 3
+    assert len(steps.notes) == 2
+
+
 async def test_invalid_quotes_cannot_pass_semantic_verification():
     steps = Steps(invalid=True)
     result = await steps.workflow().run("What are the duties?")
@@ -132,6 +182,36 @@ async def test_draft_and_verifier_receive_source_findings_and_differences():
     assert "Two periods" in steps.notes[0]
     assert steps.review_inputs == [(["A signed declaration is required [E1]"],
                                    ["Two periods need comparison [E1] [E2]"])]
+
+
+async def test_unresolved_source_difference_requires_explicit_disclosure_before_verification():
+    class DifferingRules(Steps):
+        async def coverage(self, *args):
+            return EvidenceReview(missing_searches=[], limitations=[], findings=[],
+                                  differences=["Unresolved source comparison: two periods differ [E1] [E2]"])
+
+    steps = DifferingRules()
+    result = await steps.workflow().run("What is the advance period?")
+    assert not result["verified"]
+    assert steps.verifications == 0
+    assert "unresolved comparison" in steps.notes[1]
+
+
+def test_unresolved_disclosure_accepts_plural_source_wording():
+    assert UNRESOLVED_DISCLOSURE_RE.search("The supplied excerpts do not establish which provision controls.")
+
+
+async def test_repair_receives_proposal_and_unresolved_difference_issues_together():
+    class DifferingRules(Steps):
+        async def coverage(self, *args):
+            return EvidenceReview(missing_searches=[], limitations=[], findings=[],
+                                  differences=["Unresolved source comparison: two periods differ [E1] [E2]"])
+
+    steps = DifferingRules()
+    await steps.workflow().run("The firm proposes Rs 18,000. What is the advance period?")
+    assert len(steps.notes) == 2
+    assert "Rs 18,000" in steps.notes[1]
+    assert "unresolved comparison" in steps.notes[1]
 
 
 def test_proposal_check_requires_scenario_values_but_accepts_equivalent_rupee_notation():

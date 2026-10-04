@@ -1,10 +1,14 @@
+import asyncio
+import json
 import logging
+from collections.abc import Callable
 from contextlib import asynccontextmanager
+from typing import Any
 from uuid import UUID, uuid4
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.responses import Response as PlainResponse
 
 from anchor.config import get_settings
@@ -224,6 +228,32 @@ def create_app() -> FastAPI:
             history=started.history,
         )
 
+    @app.post("/chat-api/conversations/{conversation_id}/query/stream")
+    async def stream_chat_query(
+        conversation_id: UUID,
+        payload: ChatQueryRequest,
+        request: Request,
+        response: Response,
+    ) -> StreamingResponse:
+        settings = request.app.state.settings
+        question = payload.question.strip()
+        if not question or len(question) > settings.max_query_chars:
+            raise HTTPException(status_code=422,
+                                detail=f"question must be between 1 and {settings.max_query_chars} characters")
+        session_hash = await ensure_chat_session(request, response)
+        started = await request.app.state.repository.append_chat_query(
+            session_hash, conversation_id, question,
+            user_message_id=payload.user_message_id,
+            assistant_message_id=payload.assistant_message_id,
+        )
+        if started is None:
+            raise HTTPException(status_code=404, detail="conversation not found")
+        return stream_persisted_chat_query(
+            request=request, response=response, session_hash=session_hash,
+            conversation_id=conversation_id, assistant_message_id=started.assistant_message_id,
+            question=question, history=started.history,
+        )
+
     @app.post(
         "/chat-api/conversations/{conversation_id}/messages/{assistant_message_id}/retry",
         response_model=ChatQueryResponse,
@@ -249,6 +279,25 @@ def create_app() -> FastAPI:
             assistant_message_id=assistant_message_id,
             question=retry.question,
             history=retry.history,
+        )
+
+    @app.post("/chat-api/conversations/{conversation_id}/messages/{assistant_message_id}/retry/stream")
+    async def stream_retry_chat_message(
+        conversation_id: UUID,
+        assistant_message_id: UUID,
+        request: Request,
+        response: Response,
+    ) -> StreamingResponse:
+        session_hash = await ensure_chat_session(request, response)
+        retry = await request.app.state.repository.prepare_chat_retry(
+            session_hash, conversation_id, assistant_message_id,
+        )
+        if retry is None:
+            raise HTTPException(status_code=404, detail="message not found")
+        return stream_persisted_chat_query(
+            request=request, response=response, session_hash=session_hash,
+            conversation_id=conversation_id, assistant_message_id=assistant_message_id,
+            question=retry.question, history=retry.history,
         )
 
     return app
@@ -287,6 +336,72 @@ def assistant_content_from_response(response: QueryResponse) -> str:
     return "No grounded answer was available."
 
 
+def progress_event(kind: str, payload: dict[str, Any]) -> str:
+    return f"event: {kind}\ndata: {json.dumps(payload, separators=(',', ':'))}\n\n"
+
+
+def stream_persisted_chat_query(
+    *, request: Request, response: Response, session_hash: str, conversation_id: UUID,
+    assistant_message_id: UUID, question: str, history: list[ConversationTurn],
+) -> StreamingResponse:
+    queue: asyncio.Queue[tuple[str, dict[str, Any]]] = asyncio.Queue()
+
+    def on_progress(stage: str) -> None:
+        queue.put_nowait(("progress", {"stage": stage}))
+
+    async def work() -> None:
+        try:
+            result = await execute_persisted_chat_query(
+                request=request, session_hash=session_hash, conversation_id=conversation_id,
+                assistant_message_id=assistant_message_id, question=question, history=history,
+                on_progress=on_progress,
+            )
+            payload = json.loads(result.body) if isinstance(result, JSONResponse) else result.model_dump(
+                mode="json", by_alias=True,
+            )
+            queue.put_nowait(("result", payload))
+        except asyncio.CancelledError:
+            await request.app.state.repository.fail_chat_assistant_message(
+                conversation_id, assistant_message_id, error="Response stopped before completion.",
+            )
+            raise
+        except HTTPException as exc:
+            queue.put_nowait(("error", {"status": exc.status_code, "detail": exc.detail}))
+        except Exception:
+            logger.exception("chat_stream_error")
+            await request.app.state.repository.fail_chat_assistant_message(
+                conversation_id, assistant_message_id, error="The query could not be completed. Please try again.",
+            )
+            queue.put_nowait(("error", {"status": 500,
+                                        "detail": "The query could not be completed. Please try again."}))
+        finally:
+            queue.put_nowait(("done", {}))
+
+    async def events():
+        task = asyncio.create_task(work())
+        try:
+            yield progress_event("progress", {"stage": "queued"})
+            while True:
+                try:
+                    kind, payload = await asyncio.wait_for(queue.get(), timeout=10)
+                except TimeoutError:
+                    yield ": keepalive\n\n"
+                    continue
+                if kind == "done":
+                    break
+                yield progress_event(kind, payload)
+        finally:
+            if not task.done():
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+
+    stream = StreamingResponse(events(), media_type="text/event-stream", headers={
+        "Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no",
+    })
+    stream.raw_headers.extend(header for header in response.raw_headers if header[0].lower() == b"set-cookie")
+    return stream
+
+
 async def execute_persisted_chat_query(
     *,
     request: Request,
@@ -295,6 +410,7 @@ async def execute_persisted_chat_query(
     assistant_message_id: UUID,
     question: str,
     history: list[ConversationTurn],
+    on_progress: Callable[[str], None] | None = None,
 ) -> ChatQueryResponse | JSONResponse:
     request_id = request.headers.get("x-request-id") or str(uuid4())
     try:
@@ -332,7 +448,8 @@ async def execute_persisted_chat_query(
             raise HTTPException(status_code=404, detail="conversation not found") from None
         return JSONResponse(
             status_code=429,
-            content=ChatQueryResponse(conversation=conversation).model_dump(mode="json", by_alias=True),
+            content=ChatQueryResponse(conversation=conversation,
+                                      retry_after_seconds=exc.retry_after_seconds).model_dump(mode="json", by_alias=True),
             headers={"Retry-After": str(exc.retry_after_seconds)},
         )
     try:
@@ -340,6 +457,7 @@ async def execute_persisted_chat_query(
             question,
             request_id=request_id,
             history=history,
+            on_progress=on_progress,
         )
     except ProviderError as exc:
         await request.app.state.repository.fail_chat_assistant_message(

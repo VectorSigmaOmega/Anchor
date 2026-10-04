@@ -109,6 +109,9 @@ class ChatHistoryResponse(BaseModel):
 
 class ChatQueryResponse(BaseModel):
     conversation: ChatConversation
+    retry_after_seconds: int | None = Field(default=None, alias="retryAfterSeconds")
+
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class HealthResponse(BaseModel):
