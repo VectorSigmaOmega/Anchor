@@ -13,6 +13,7 @@ from anchor.pipeline.service import QueryService
 from anchor.providers.gemini import GeminiAPIClient, GeminiEmbeddingProvider, GeminiGenerationProvider
 from anchor.providers.rerank import CohereRerankProvider
 from anchor.providers.workflow import GeminiWorkflowProvider
+from anchor.schemas import RetrievedChunk
 from anchor.services.metrics import Metrics
 from anchor.services.tracing import NullSpan, NullTrace
 from scripts.evaluate_quality import failures
@@ -47,6 +48,13 @@ class RecordedTracer:
         return RecordedTrace(self.rows)
 
 
+def replay_context(chunks):
+    async def retrieve(*args, **kwargs):
+        return chunks, chunks
+
+    return retrieve
+
+
 async def run(args):
     base = Settings()
     base.langfuse_public_key = base.langfuse_secret_key = ""
@@ -59,6 +67,15 @@ async def run(args):
     cases = [json.loads(line) for line in Path(args.dataset).read_text().splitlines()]
     if args.only:
         cases = [c for c in cases if c["id"] in args.only.split(",")]
+    replay_rows = {}
+    if args.replay_context:
+        for line in Path(args.replay_context).read_text().splitlines():
+            row = json.loads(line)
+            if row.get("variant") == "workflow" and row.get("context"):
+                replay_rows[row["id"]] = [RetrievedChunk.model_validate(chunk) for chunk in row["context"]]
+        missing = {case["id"] for case in cases} - replay_rows.keys()
+        if missing:
+            raise ValueError(f"No frozen context for: {', '.join(sorted(missing))}")
     db = Database(settings)
     await db.open()
     events = []
@@ -99,10 +116,13 @@ async def run(args):
                                            generation_provider=GeminiGenerationProvider(current),
                                            rerank_provider=CohereRerankProvider(current), tracer=tracer,
                                            metrics=Metrics("anchor_workflow_eval"))
+                    if replay_rows:
+                        service._retrieve_context = replay_context(replay_rows[case["id"]])
                     events.clear()
                     reviews.clear()
                     started = perf_counter()
-                    row = {"variant": variant, "id": case["id"], "question": case["question"], "model": current.generation_model}
+                    row = {"variant": variant, "id": case["id"], "question": case["question"],
+                           "model": current.generation_model, "replayed_context": bool(replay_rows)}
                     try:
                         result = await service.execute(case["question"])
                         response = result.response.model_dump(mode="json")
@@ -128,6 +148,7 @@ def main():
     parser.add_argument("--variants", default="linear,workflow")
     parser.add_argument("--only")
     parser.add_argument("--pause", type=float, default=13)
+    parser.add_argument("--replay-context", help="Recorded workflow contexts; skips retrieval to isolate answer behavior.")
     asyncio.run(run(parser.parse_args()))
 
 

@@ -370,9 +370,9 @@ class QueryService:
             span.end(output={"status": result.status, "usage_metadata": provider.last_usage_metadata})
             return result
 
-        async def verify(question, requirements, draft, context):
+        async def verify(question, requirements, draft, context, findings, differences):
             span = trace.generation("workflow_verification", model=self.settings.multipart_generation_model)
-            result = await provider.verify_answer(question, requirements, draft, context)
+            result = await provider.verify_answer(question, requirements, draft, context, findings, differences)
             span.end(output={**result.model_dump(), "checks": getattr(provider, "last_review_checks", []),
                              "usage_metadata": provider.last_usage_metadata})
             return result

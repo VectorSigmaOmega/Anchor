@@ -553,7 +553,7 @@ async def test_multipart_workflow_runs_claim_review_before_returning_answer(monk
         async def assess_evidence(self, question, requirements, context):
             return EvidenceReview(missing_searches=[], limitations=[], findings=[])
 
-        async def verify_answer(self, question, requirements, draft, context):
+        async def verify_answer(self, question, requirements, draft, context, findings, differences):
             calls.append("verify")
             return AnswerReview(issues=[])
 
@@ -587,7 +587,7 @@ async def test_workflow_cannot_return_draft_after_persistent_claim_failure(monke
             type(self).generations += 1
             return await super().generate(**kwargs)
 
-        async def verify_answer(self, question, requirements, draft, context):
+        async def verify_answer(self, question, requirements, draft, context, findings, differences):
             return AnswerReview(issues=["Cited passage does not support the claimed amount."])
 
     monkeypatch.setattr("anchor.providers.workflow.GeminiWorkflowProvider", WorkflowProvider)
