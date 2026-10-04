@@ -4,17 +4,36 @@ Updated: 4 October 2026. Owner: Codex with Abhinash.
 
 This file tracks the remaining work, the first approach to each problem, how to
 judge the result, and a backup if the first approach fails. Proposed changes below
-are tracked separately from the implementation status. The candidate has passed
-the limited local release checks described below; CI and production checks are
-still pending. Status changes must link to code and recorded results;
+are tracked separately from the implementation status. The selected candidate
+is deployed and the live smoke checks below have passed; broad answer quality
+remains an open measurement problem. Status changes must link to code and recorded results;
 implementing a change is not the same as resolving its problem.
 
-## Starting point
+## Current deployment
+
+- **Live:** [anchor.abhinash.dev](https://anchor.abhinash.dev) uses Gemini 3.8
+  Flash for ordinary answers and the bounded LangGraph path for detected
+  multipart questions. Planning and most reviews use Gemini 3.5 Flash Lite;
+  source-pair review and multipart drafting use 3.8 Flash. Generation and
+  embeddings remain with Gemini; the corrected 4,012-chunk index was not
+  rebuilt for this release.
+- **Operational controls:** Streamed progress comes from actual backend stages.
+  The existing per-IP 10-per-minute/100-per-day limiter covers the streamed
+  query path. `MULTIPART_WORKFLOW_ENABLED` can disable the graph while leaving
+  the tested source-comparison linear fallback enabled. Deployment passes both
+  flags through to the server.
+- **Release:** [PR #9](https://github.com/VectorSigmaOmega/Anchor/pull/9)
+  delivered the workflow and streaming UI. [PR #10](https://github.com/VectorSigmaOmega/Anchor/pull/10)
+  and [PR #11](https://github.com/VectorSigmaOmega/Anchor/pull/11) fixed the
+  mobile scroll behavior found during live testing. The final deploy run
+  `37233440586` succeeded; production browser checks are recorded below.
+
+## Starting point before this release
 
 - **Deployed:** Gemini generation and embeddings, IP limits, the 4,000-character
   question limit, citation/UI improvements, and the corrected 4,012-chunk index.
-- **Experimental:** [PR #9](https://github.com/VectorSigmaOmega/Anchor/pull/9)
-  contains a bounded LangGraph workflow. It remains disabled and undeployed.
+- **Experimental at that point:** PR #9 contained a bounded LangGraph workflow
+  that was disabled and undeployed until its local release checks passed.
 - **Recorded baseline evidence:** [workflow evaluation](WORKFLOW_EVALUATION.md),
   [answers and traces](../eval/reports/workflow-2026-10-03.jsonl), and
   [chunking evaluation](CHUNKING_EVALUATION.md). New development-only replay
@@ -48,9 +67,9 @@ implementing a change is not the same as resolving its problem.
 | P2 | Relevant obligations and requested details disappear | Validated locally on undertaking-omission control and five development cases; broader completeness unproven | Dynamic review tasks with obligation and answer coverage checks | Answer requested parts separately, then assemble without resummarizing |
 | P3 | Differing provisions are overlooked or incorrectly reconciled | Validated locally on RA advance-period and historical-footnote regressions; cross-document precedence remains unresolved where sources do not establish it | Compare rules about the same activity and applicable scope | Present unresolved source provisions side by side with citations |
 | P4 | Relevant passages exist but are not selected | Validated locally on a withheld-footnote control; five development questions avoided unnecessary follow-up searches | Targeted follow-up retrieval and nearby/reference expansion | Retrieve a bounded parent section with lexical and document-aware search |
-| P5 | Extra calls increase cost, latency, and capacity pressure | Five-case full workflow median 21.91 s and 275,161 generation input tokens versus 10.73 s and 45,547 for the source-comparison linear path; live progress implemented; production capacity pending | Reduce duplicated context/calls and measure per-stage usage | Use a simpler evidence-first path and restrict costly reviews to unresolved parts |
-| P6 | Evaluation is too narrow to establish generalisation | Three repeated revised held-out runs met all written expectations on both routes; only one of ten questions used the graph, nine were previously seen, and production remains unchecked | Freeze source-reviewed development and held-out sets | Narrow rollout scope and retain source-reviewed/manual release checks |
-| P7 | Remaining UI states need refinement and verification | Live SSE stage events, cancellation, mobile navigation, failure/refusal actions and landing metrics pass local checks; production smoke check pending | Test loading, citations, errors, partial answers, and responsive behavior | Use a simpler answer/status/source presentation if richer interactions fail |
+| P5 | Extra calls increase cost, latency, and capacity pressure | Five-case full workflow median 21.91 s and 275,161 generation input tokens versus 10.73 s and 45,547 for the source-comparison linear path; one production RTA/issuer answer took 15.7 s with visible progress; capacity under sustained traffic remains unmeasured | Reduce duplicated context/calls and measure per-stage usage | Use a simpler evidence-first path and restrict costly reviews to unresolved parts |
+| P6 | Evaluation is too narrow to establish generalisation | Three repeated revised held-out runs met all written expectations on both routes; only one of ten questions used the graph, nine were previously seen, and one production complex answer was source-reviewed. Broad accuracy advantage remains unproven | Freeze source-reviewed development and held-out sets | Narrow rollout scope and retain source-reviewed/manual release checks |
+| P7 | Remaining UI states need refinement and verification | Deployed and browser checked: real SSE stage events and cited answer; 360/768/1100/1440 px landing/chat layouts had no horizontal overflow. Software checks cover cancellation, rate-limit, and failure/refusal actions; those paths were not exhaustively exercised in production | Test loading, citations, errors, partial answers, and responsive behavior | Use a simpler answer/status/source presentation if richer interactions fail |
 
 ## Development checkpoint (4 October 2026)
 
@@ -274,6 +293,35 @@ provider errors, and answer samples, and disable the graph if those regress.
 Local validation: 191 tests passed and 6 PostgreSQL integration checks skipped
 without a local PostgreSQL service; Ruff, UI lint/build, fixture smoke
 evaluation, and `git diff --check` passed. CI must run the database checks.
+
+## Production release check (4 October 2026)
+
+PR #9's CI passed with PostgreSQL, frontend export, fixture smoke evaluation,
+and container build. PR #11's final CI run `37233274401` passed 197 tests, Ruff,
+frontend export, fixture smoke evaluation, and container build. Production
+deploy run `37233440586` succeeded, and `/healthz` returned HTTP 200.
+
+A Playwright browser inspected `/` and `/chat` at 360, 768, 1100, and 1440 px;
+neither route overflowed horizontally. A live multipart RTA/issuer question
+used the streamed endpoint with `text/event-stream`, displayed real progress,
+and returned a six-source answer in 15.7 seconds. Source review confirmed the
+RTA's 7 April 2026 monthly deadline, the issuer's 30 April 2026 quarterly
+deadline, and their separate duties. The final mobile retest showed the
+pending label inside the reading viewport and the completed assistant turn at
+y=73 px near the top of its scroll area, with no horizontal overflow or browser
+console errors. Earlier live testing found that a long question kept the
+assistant below the viewport; PRs #10 and #11 resolved that issue. The fix was
+also exercised with the new static UI against the production API before PR #11
+merged.
+
+This release check is a smoke test, not proof of generalised factual accuracy.
+In the held-out set both routes met the written expectations, and most cases
+did not invoke the graph. The graph's extra claim and coverage checks passed
+targeted controls, but they cost substantially more on the five complex
+development questions. Continue reviewing fresh, unseen multi-document
+questions and monitor real error rates and latency. If quality does not improve
+or cost becomes disproportionate, set `MULTIPART_WORKFLOW_ENABLED=false` to
+use the deployed source-comparison linear fallback.
 
 ## Shared design for P1–P4
 
@@ -552,6 +600,7 @@ quality, cost, or usability introduced by a backup.
 | 2026-10-04 | P1–P6 | Uncommitted candidate adds bounded verifier batches, nearby lexical follow-up, generic linear prompt, and Lite retrieval planner option. One fresh five-case 3.8 Flash linear run answered all five at 7.57-second median and 40,736 generation-input tokens; 176 tests and Ruff pass. Held-out unopened. | Run corruption and retrieval controls, repeat semantic development review, then held-out/operational/UI gates. |
 | 2026-10-04 | P1–P7 | Resumed candidate adds full-context gap adjudication, quantity-diverse source comparisons, live workflow events, and proxy support. Withheld-footnote probe recovered the source; five development questions avoided false follow-ups at 21.91-second median and estimated $0.188 Gemini generation cost. Two focused IA/RA repeats disclosed the unresolved periods. Backend 196 tests, Ruff, UI lint/build pass. Frozen held-out run started after development gate. | Complete matched-model held-out comparison and source review; decide route, then production/browser smoke checks. |
 | 2026-10-04 | P1–P7 | Uncommitted candidate on `feat/bounded-multipart-workflow`: revised held-out SHA recorded above, graph and matched linear route each met 10/10 written expectations in three runs. NCS historical-footnote regression answered in three consecutive graph runs after full-chunk context fix. Five complex development cases answered on both routes; graph used about six times the generation input tokens and twice the median time. Fresh IA/RA and RTA graph checks remained source-consistent. 191 local tests passed, 6 database checks skipped; Ruff, UI lint/build, and fixture smoke passed. | Commit and run CI with PostgreSQL, configure feature flags, deploy, then source-review production samples and inspect browser states. |
+| 2026-10-04 | P1–P7 | PRs #9–#11 merged and deployed. Final CI passed 197 tests plus UI/fixture/container checks. Production `/healthz` returned 200; four viewport widths had no horizontal overflow; a live RTA/issuer multipart query showed actual progress and a cited six-source answer in 15.7 s. A long-question scroll defect found during the first browser smoke was corrected and retested in production. The graph has no demonstrated broad accuracy advantage over the cheaper linear comparison path. | Review new, unseen complex questions and real latency/provider errors; use the feature flag and linear fallback if quality or cost regresses. |
 
 For each experiment, append its commit, model/index versions, dataset/split, artifact
 path, measured result, and decision. Use statuses: Open, In progress, Implemented
