@@ -44,6 +44,34 @@ async def test_rerank_failures_are_provider_errors(failure) -> None:
 
     assert caught.value.provider == "cohere"
     assert caught.value.status_code == (failure.status_code if isinstance(failure, httpx.Response) else None)
+    assert route.call_count == (2 if isinstance(failure, httpx.ConnectError)
+                                or isinstance(failure, httpx.Response) and failure.status_code == 503 else 1)
+
+
+@pytest.mark.parametrize("first_failure", [httpx.Response(503), httpx.ConnectError("offline")])
+@respx.mock
+async def test_transient_rerank_failure_retries_once(first_failure) -> None:
+    calls = 0
+
+    def respond(request):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            if isinstance(first_failure, Exception):
+                raise first_failure
+            return first_failure
+        return httpx.Response(200, json={"results": [{"index": 0, "relevance_score": 0.8}]})
+
+    respx.post("https://api.cohere.com/v2/rerank").mock(side_effect=respond)
+    provider = CohereRerankProvider(Settings(_env_file=None, database_url="postgresql://unused",
+                                             cohere_api_key="test-key"))
+    chunk = RetrievedChunk(chunk_id="kyc-1", doc_id="kyc", doc_title="KYC", regulator="RBI",
+                           section_path="CDD", text="Identify customers.", source_url="https://example.com")
+
+    result = await provider.rerank("What is KYC?", [chunk], top_n=1)
+
+    assert calls == 2
+    assert result[0].relevance_score == 0.8
 
 
 @pytest.mark.parametrize("results", [[], [{"index": -1, "relevance_score": 0.9}], [{"index": 0, "relevance_score": "nan"}]])

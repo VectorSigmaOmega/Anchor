@@ -1,7 +1,7 @@
 import pytest
 
 from anchor.pipeline.citations import validate_and_hydrate_citations, verified_quote
-from anchor.providers.evidence import advance_fee_differences, hydrate_selected_excerpts, source_excerpts
+from anchor.providers.evidence import hydrate_selected_excerpts, source_excerpts
 from anchor.providers.gemini import MalformedModelOutputError
 from anchor.schemas import ModelQueryResponse, RetrievedChunk
 
@@ -63,16 +63,6 @@ def test_citations_are_constructed_from_first_use_without_a_redundant_model_arra
     assert [c["chunk_id"] for c in data["citations"]] == ["ra", "ia"]
     with pytest.raises(MalformedModelOutputError):
         hydrate_selected_excerpts({"status": "answered", "answer": "Invented [E999]."}, evidence)
-
-
-def test_differing_advance_periods_are_flagged_only_within_the_same_document():
-    sources = [chunk("main", "Such advance shall not exceed fees for a period of one year."),
-               chunk("template", "Such advance shall not exceed the period stipulated; presently one quarter.")]
-    _, evidence = source_excerpts(sources)
-    assert advance_fee_differences(evidence, sources) == ""
-    sources[1].doc_id = sources[0].doc_id
-    assert "[E1] says one year" in advance_fee_differences(evidence, sources)
-    assert "[E2] says one quarter" in advance_fee_differences(evidence, sources)
 
 
 @pytest.mark.parametrize("answer", [None, 42, ["A claim"]])

@@ -700,6 +700,39 @@ class AnchorRepository:
             rows = await cur.fetchall()
         return [RetrievedChunk(**row) for row in rows]
 
+    async def nearby_lexical_search(self, question: str, anchor_chunk_ids: list[str], *,
+                                    radius: int = 3, limit: int = 4) -> list[RetrievedChunk]:
+        """Find a referenced footnote or condition near already supported passages."""
+        terms = significant_terms(question)
+        if not terms or not anchor_chunk_ids:
+            return []
+        search_query = " OR ".join(sorted(terms))
+        async with self.db.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                """
+                    WITH query AS (SELECT websearch_to_tsquery('english', %s) AS q),
+                    anchors AS (SELECT doc_id, chunk_index FROM chunks WHERE chunk_id = ANY(%s))
+                    SELECT c.chunk_id, c.doc_id, d.title AS doc_title, d.regulator, d.topic_family,
+                           c.section_path, c.page, c.text, d.source_url,
+                           ts_rank_cd(c.text_tsv, query.q, 32) AS lexical_score
+                    FROM chunks c
+                    JOIN documents d ON d.doc_id = c.doc_id
+                    CROSS JOIN query
+                    WHERE d.is_active = TRUE
+                      AND c.text_tsv @@ query.q
+                      AND c.chunk_id <> ALL(%s)
+                      AND EXISTS (
+                          SELECT 1 FROM anchors a
+                          WHERE a.doc_id = c.doc_id AND ABS(a.chunk_index - c.chunk_index) <= %s
+                      )
+                    ORDER BY lexical_score DESC, c.doc_id, c.chunk_index
+                    LIMIT %s
+                """,
+                (search_query, anchor_chunk_ids, anchor_chunk_ids, radius, limit),
+            )
+            rows = await cur.fetchall()
+        return [RetrievedChunk(**row) for row in rows]
+
     async def dense_search(self, embedding: list[float], limit: int) -> list[RetrievedChunk]:
         vector = to_pgvector(embedding)
         async with self.db.connection() as conn, conn.cursor() as cur:

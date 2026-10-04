@@ -7,30 +7,6 @@ from anchor.providers.gemini import MalformedModelOutputError
 from anchor.schemas import RetrievedChunk
 
 
-def advance_fee_differences(evidence: dict[str, dict[str, str]], chunks: Sequence[RetrievedChunk]) -> str:
-    """Surface differing advance periods in one document without deciding precedence."""
-    documents = {c.chunk_id: c for c in chunks}
-    findings: dict[str, dict[str, str]] = {}
-    pattern = re.compile(
-        r"(?:such advance|advance fees|fees in advance)[^.!?]{0,220}?"
-        r"\b(one year|one quarter|12 months|twelve months)\b", re.IGNORECASE,
-    )
-    for evidence_id, item in evidence.items():
-        match = pattern.search(item["quote"])
-        if match:
-            period = match.group(1).lower()
-            period = "one year" if period in {"12 months", "twelve months"} else period
-            doc_id = documents[item["chunk_id"]].doc_id
-            findings.setdefault(doc_id, {}).setdefault(period, evidence_id)
-    notes = []
-    for periods in findings.values():
-        if len(periods) > 1:
-            notes.append("Advance-fee passages in the same document differ: " +
-                         "; ".join(f"[{eid}] says {period}" for period, eid in periods.items()) +
-                         ". Compare their scope and explicitly explain any unresolved inconsistency.")
-    return "\n".join(notes)
-
-
 def source_excerpts(chunks: Sequence[RetrievedChunk]) -> tuple[str, dict[str, dict[str, str]]]:
     evidence: dict[str, dict[str, str]] = {}
     rendered = []

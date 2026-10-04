@@ -15,6 +15,12 @@ def settings() -> Settings:
                     gemini_api_key="key", cohere_api_key="key")
 
 
+def test_latest_flash_uses_low_when_minimal_is_not_supported():
+    assert gemini.supported_thinking_level("gemini-3.8-flash", "minimal") == "low"
+    assert gemini.supported_thinking_level("models/gemini-3.7-flash", "minimal") == "low"
+    assert gemini.supported_thinking_level("gemini-3.5-flash-lite", "minimal") == "minimal"
+
+
 class FakeGeminiClient:
     def __init__(self, payload: dict):
         self.payload = payload
@@ -236,6 +242,35 @@ async def test_malformed_retrieval_plans_cannot_be_used_for_search(questions):
     })
     with pytest.raises(ProviderError, match="invalid retrieval plan"):
         await provider.plan_retrieval_questions("Compare fees; deposits; segregation.")
+
+
+async def test_retrieval_plan_uses_configured_lightweight_model():
+    provider = GeminiGenerationProvider(settings().model_copy(update={
+        "generation_model": "gemini-3.8-flash",
+        "retrieval_plan_model": "gemini-3.5-flash-lite",
+    }))
+    provider.client = FakeGeminiClient({
+        "candidates": [{"content": {"parts": [{"text": json.dumps({
+            "questions": ["First requested activity?", "Second requested activity?"],
+        })}]}}],
+    })
+    assert len(await provider.plan_retrieval_questions("Compare both activities.")) == 2
+    path, payload = provider.client.calls[0]
+    assert path == "gemini-3.5-flash-lite:generateContent"
+    assert payload["generationConfig"]["thinkingConfig"] == {"thinkingLevel": "minimal"}
+    instructions = payload["systemInstruction"]["parts"][0]["text"]
+    assert "deposit/client-count/deadline" not in instructions
+
+
+def test_multipart_answer_instructions_do_not_encode_example_case_answers():
+    provider = GeminiGenerationProvider(settings())
+    chunks = [RetrievedChunk(chunk_id=f"chunk-{n}", doc_id="fixture", doc_title="Fixture", regulator="SEBI",
+                             section_path="Requirements", text=f"Supporting fact {n}.", source_url="https://example.com")
+              for n in range(6)]
+    instructions = provider._payload(question="Compare activities.", context_chunks=chunks, retry_note=None)[
+        "systemInstruction"]["parts"][0]["text"]
+    for example in ("dual-registration", "investment-advice/research", "breakage fees", "A lien", "one quarter"):
+        assert example not in instructions
 
 
 async def test_multipart_generation_selects_source_text_and_uses_the_configured_model():

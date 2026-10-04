@@ -4,7 +4,7 @@ import asyncio
 import logging
 import re
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from uuid import uuid4
 
 from anchor.config import Settings
@@ -124,10 +124,17 @@ class QueryService:
         question: str,
         request_id: str | None = None,
         history: Sequence[ConversationTurn] | None = None,
+        on_progress: Callable[[str], None] | None = None,
     ) -> QueryExecutionResult:
+        resolved = resolve_current_question(question, history or [])
+        budget = self.settings.workflow_timeout_seconds if (
+            self.settings.multipart_workflow_enabled and self.settings.generation_provider == "gemini"
+            and is_multipart_question(resolved)
+        ) else self.settings.query_timeout_seconds
         try:
-            async with asyncio.timeout(self.settings.query_timeout_seconds):
-                return await self._execute(question, request_id=request_id, history=history)
+            async with asyncio.timeout(budget):
+                return await self._execute(question, request_id=request_id, history=history,
+                                           on_progress=on_progress)
         except TimeoutError as exc:
             raise ProviderError("Query exceeded its time budget", provider="pipeline") from exc
 
@@ -136,6 +143,7 @@ class QueryService:
         question: str,
         request_id: str | None = None,
         history: Sequence[ConversationTurn] | None = None,
+        on_progress: Callable[[str], None] | None = None,
     ) -> QueryExecutionResult:
         request_id = request_id or str(uuid4())
         started = time.perf_counter()
@@ -173,56 +181,28 @@ class QueryService:
                 search_questions.append(resolved_question)
             if contextual_question != question and not was_rewritten:
                 search_questions.append(question)
-            planned_questions: list[str] = []
-            planner = getattr(self.generation_provider, "plan_retrieval_questions", None)
-            if is_multipart_question(resolved_question) and callable(planner):
-                plan_span = trace.span("retrieval_plan", input={"question": resolved_question})
-                planned_questions = await planner(resolved_question)
-                plan_span.end(output={"questions": planned_questions})
-                search_questions.extend(q for q in planned_questions if q not in search_questions)
-            lexical_results, dense_results = await self._search(search_questions, trace)
-            fused_chunks = self._fuse(lexical_results, dense_results, trace)
-            topic_pools: list[list[RetrievedChunk]] = []
-            if planned_questions:
-                for search_question, lexical, dense in zip(search_questions, lexical_results, dense_results, strict=True):
-                    if search_question in planned_questions:
-                        topic_pools.append(fuse_ranked_chunk_lists(
-                            [(self._content_passages(lexical), "lexical_score"),
-                             (self._content_passages(dense), "dense_score")],
-                            constant=self.settings.rrf_constant,
-                        ))
-                candidate_count = self.settings.multipart_rerank_candidate_count
-                fused_pool = balanced_candidates([*topic_pools, fused_chunks], candidate_count)
+            use_workflow = (self.settings.multipart_workflow_enabled
+                            and self.settings.generation_provider == "gemini"
+                            and is_multipart_question(resolved_question))
+            model_response = None
+            if use_workflow:
+                model_response, reranked, context_chunks = await self._run_multipart_workflow(
+                    contextual_question, resolved_question, trace, on_progress=on_progress,
+                )
             else:
-                fused_pool = fused_chunks[: self.settings.rerank_candidate_count]
-            reranked = await self._rerank(
-                resolved_question if was_rewritten else contextual_question, fused_pool, trace,
-                top_n=len(fused_pool) if topic_pools else None,
-            )
-            reranked, hinted_titles = self._apply_document_hints(contextual_question, reranked, trace)
-            context_span = trace.span("context_selection", input={"reranked_count": len(reranked)})
-            context_chunks = self._select_context(
-                contextual_question,
-                question,
-                reranked,
-                hinted_titles,
-            )
-            if topic_pools:
-                context_chunks = self._select_multipart_context(reranked, topic_pools)
-            context_span.end(
-                output={
-                    "context_count": len(context_chunks),
-                    "chunks": [
-                        {
-                            "chunk_id": chunk.chunk_id,
-                            "doc_id": chunk.doc_id,
-                            "section_path": chunk.section_path,
-                            "relevance_score": chunk.relevance_score,
-                        }
-                        for chunk in context_chunks
-                    ],
-                }
-            )
+                planned_questions: list[str] = []
+                planner = getattr(self.generation_provider, "plan_retrieval_questions", None)
+                if is_multipart_question(resolved_question) and callable(planner):
+                    self._emit_progress(on_progress, "planning")
+                    plan_span = trace.span("retrieval_plan", input={"question": resolved_question})
+                    planned_questions = await planner(resolved_question)
+                    plan_span.end(output={"questions": planned_questions})
+                    search_questions.extend(q for q in planned_questions if q not in search_questions)
+                self._emit_progress(on_progress, "searching")
+                reranked, context_chunks = await self._retrieve_context(
+                    contextual_question, question, search_questions, planned_questions, trace,
+                    rerank_question=resolved_question if was_rewritten else contextual_question,
+                )
             refusal_reason = refusal_reason_for_context(
                 contextual_question,
                 reranked,
@@ -230,30 +210,60 @@ class QueryService:
                 self.settings,
                 ambiguity_question=resolved_question,
             )
-            if refusal_reason:
+            if refusal_reason and not use_workflow:
                 response = self._refusal_response(request_id, refusal_reason, started)
             else:
-                model_response = await self._generate_with_retry(contextual_question, context_chunks, trace)
+                if model_response is None:
+                    comparison_note = None
+                    if (self.settings.linear_source_comparison_enabled and not use_workflow
+                            and self.settings.generation_provider == "gemini"
+                            and is_multipart_question(resolved_question) and context_chunks and planned_questions):
+                        self._emit_progress(on_progress, "comparing")
+                        from anchor.providers.workflow import GeminiWorkflowProvider
+
+                        comparison_provider = GeminiWorkflowProvider(self.settings)
+                        comparison_span = trace.generation(
+                            "linear_source_comparison", model=self.settings.multipart_generation_model,
+                        )
+                        comparison = await comparison_provider.assess_evidence(
+                            resolved_question, planned_questions, context_chunks, review_topics=False,
+                        )
+                        comparison_note = "\n".join(comparison.differences) or None
+                        comparison_span.end(output={
+                            "differences": comparison.differences,
+                            "usage_metadata": comparison_provider.last_usage_metadata,
+                        })
+                    self._emit_progress(on_progress, "drafting")
+                    model_response = await self._generate_with_retry(
+                        contextual_question, context_chunks, trace, initial_note=comparison_note,
+                    )
+                if not use_workflow:
+                    self._emit_progress(on_progress, "checking")
                 validation_span = trace.span(
                     "response_validation",
                     input={"model_status": model_response.status},
                 )
                 hydrated = validate_and_hydrate_citations(
-                    model_response, context_chunks, max_rendered=self.settings.max_citations
+                    model_response, context_chunks,
+                    max_rendered=self.settings.multipart_max_citations if use_workflow else self.settings.max_citations,
                 )
-                if not hydrated[0]:
+                if not hydrated[0] and not use_workflow:
                     try:
                         retry_response = await self._generate(
                             contextual_question,
                             context_chunks,
                             trace,
-                            retry_note=self._validation_retry_note(model_response),
+                            retry_note="\n".join(filter(None, [
+                                comparison_note,
+                                self._validation_retry_note(model_response),
+                            ])),
                         )
                     except MalformedModelOutputError:
                         hydrated = (False, [])
                     else:
                         hydrated = validate_and_hydrate_citations(
-                            retry_response, context_chunks, max_rendered=self.settings.max_citations
+                            retry_response, context_chunks,
+                            max_rendered=self.settings.multipart_max_citations if use_workflow else self.settings.max_citations,
                         )
                         model_response = retry_response
                 validation_span.end(
@@ -308,6 +318,143 @@ class QueryService:
             else:
                 self.metrics.requests_total.labels(status="error").inc()
                 trace.end(output={"status": "error", "latency_ms": self._latency_ms(started)})
+
+    async def _retrieve_context(self, contextual_question, question, search_questions, planned_questions, trace, rerank_question=None):
+        lexical_results, dense_results = await self._search(search_questions, trace)
+        fused_chunks = self._fuse(lexical_results, dense_results, trace)
+        topic_pools: list[list[RetrievedChunk]] = []
+        if planned_questions:
+            for search_question, lexical, dense in zip(search_questions, lexical_results, dense_results, strict=True):
+                if search_question in planned_questions:
+                    topic_pools.append(fuse_ranked_chunk_lists(
+                        [(self._content_passages(lexical), "lexical_score"),
+                         (self._content_passages(dense), "dense_score")],
+                        constant=self.settings.rrf_constant,
+                    ))
+            candidate_count = self.settings.multipart_rerank_candidate_count
+            fused_pool = balanced_candidates([*topic_pools, fused_chunks], candidate_count)
+        else:
+            fused_pool = fused_chunks[: self.settings.rerank_candidate_count]
+        reranked = await self._rerank(
+            rerank_question or contextual_question, fused_pool, trace,
+            top_n=len(fused_pool) if topic_pools else None,
+        )
+        reranked, hinted_titles = self._apply_document_hints(contextual_question, reranked, trace)
+        context_span = trace.span("context_selection", input={"reranked_count": len(reranked)})
+        context_chunks = self._select_context(
+            contextual_question,
+            question,
+            reranked,
+            hinted_titles,
+        )
+        if topic_pools:
+            context_chunks = self._select_multipart_context(reranked, topic_pools)
+        context_span.end(
+            output={
+                "context_count": len(context_chunks),
+                "chunks": [
+                    {
+                        "chunk_id": chunk.chunk_id,
+                        "doc_id": chunk.doc_id,
+                        "section_path": chunk.section_path,
+                        "relevance_score": chunk.relevance_score,
+                    }
+                    for chunk in context_chunks
+                ],
+            }
+        )
+        return reranked, context_chunks
+
+    @staticmethod
+    def _emit_progress(on_progress: Callable[[str], None] | None, stage: str) -> None:
+        if on_progress is not None:
+            on_progress(stage)
+
+    async def _run_multipart_workflow(self, question, resolved_question, trace, *, on_progress=None):
+        from anchor.pipeline.workflow import MultipartWorkflow
+        from anchor.providers.workflow import GeminiWorkflowProvider, focus_review_context
+
+        provider = GeminiWorkflowProvider(self.settings)
+        draft_count = 0
+
+        async def plan(question):
+            self._emit_progress(on_progress, "planning")
+            span = trace.generation("workflow_plan", model=self.settings.multipart_generation_model)
+            searches = await provider.plan_retrieval_questions(resolved_question)
+            span.end(output={"questions": searches, "usage_metadata": provider.last_usage_metadata})
+            return searches
+
+        async def retrieve(searches, existing):
+            self._emit_progress(on_progress, "expanding" if existing else "searching")
+            reranked, context = await self._retrieve_context(question, resolved_question, [resolved_question, *searches], searches, trace)
+            if existing:
+                if refusal_reason_for_context(question, reranked, context, self.settings,
+                                              ambiguity_question=resolved_question):
+                    context = []
+                nearby = []
+                nearby_search = getattr(self.repository, "nearby_lexical_search", None)
+                if callable(nearby_search):
+                    anchors = focus_review_context(" ".join(searches), existing, limit=2)
+                    nearby = await nearby_search(" ".join(searches), [item.chunk_id for item in anchors],
+                                                  radius=3, limit=4)
+                nearby_ids = {item.chunk_id for item in nearby}
+                # Preserve established evidence and add at most four local or
+                # newly retrieved passages for the single bounded follow-up.
+                existing_ids = {c.chunk_id for c in existing}
+                additions = []
+                for candidate in [*nearby, *context]:
+                    if candidate.chunk_id in existing_ids or any(c.chunk_id == candidate.chunk_id for c in additions):
+                        continue
+                    if (candidate.chunk_id not in nearby_ids
+                            and (candidate.relevance_score or 0) < self.settings.rerank_min_support_score):
+                        continue
+                    additions.append(candidate)
+                    if len(additions) == 4:
+                        break
+                context = [*existing, *additions]
+                combined = {c.chunk_id: c for c in [*existing, *reranked, *nearby]}
+                reranked = list(combined.values())
+            elif refusal_reason_for_context(question, reranked, context, self.settings,
+                                            ambiguity_question=resolved_question):
+                return reranked, []
+            return reranked, context
+
+        async def coverage(question, requirements, context):
+            self._emit_progress(on_progress, "reviewing")
+            span = trace.generation("workflow_coverage", model=self.settings.multipart_generation_model)
+            if self.settings.workflow_topic_review_enabled:
+                result = await provider.assess_evidence(question, requirements, context)
+            else:
+                result = await provider.assess_evidence(question, requirements, context, review_topics=False)
+            span.end(output={**result.model_dump(), "usage_metadata": provider.last_usage_metadata})
+            return result
+
+        async def generate(question, context, note):
+            nonlocal draft_count
+            draft_count += 1
+            self._emit_progress(on_progress, "refining" if draft_count > 1 else "drafting")
+            draft_model = getattr(provider, "model_for_context", None)
+            span = trace.generation("workflow_draft", model=draft_model(context) if callable(draft_model) else
+                                    (self.settings.workflow_draft_model or self.settings.multipart_generation_model))
+            result = await provider.generate(question=question, context_chunks=context, retry_note=note)
+            span.end(output={"status": result.status, "usage_metadata": provider.last_usage_metadata})
+            return result
+
+        async def verify(question, requirements, draft, context, findings, differences):
+            self._emit_progress(on_progress, "checking")
+            span = trace.generation("workflow_verification", model=self.settings.multipart_generation_model)
+            result = await provider.verify_answer(question, requirements, draft, context, findings, differences)
+            span.end(output={**result.model_dump(), "checks": getattr(provider, "last_review_checks", []),
+                             "usage_metadata": provider.last_usage_metadata})
+            return result
+
+        workflow = MultipartWorkflow(plan=plan, retrieve=retrieve, coverage=coverage, generate=generate, verify=verify,
+                                     max_citations=self.settings.multipart_max_citations)
+        state = await workflow.run(question)
+        draft = state["draft"] if state["verified"] else ModelQueryResponse(
+            status="refused", answer="", refusal_reason="insufficient_support", citations=[],
+        )
+        return draft, state["reranked"], state["context"]
 
     async def _search(
         self,
@@ -521,19 +668,21 @@ class QueryService:
         question: str,
         context_chunks: list[RetrievedChunk],
         trace: NullTrace,
+        initial_note: str | None = None,
     ) -> ModelQueryResponse:
         try:
-            return await self._generate(question, context_chunks, trace)
+            return await self._generate(question, context_chunks, trace, retry_note=initial_note)
         except MalformedModelOutputError:
             try:
                 return await self._generate(
                     question,
                     context_chunks,
                     trace,
-                    retry_note=(
+                    retry_note="\n".join(filter(None, [
+                        initial_note,
                         "Your previous output was invalid or malformed. Return valid JSON only, "
-                        "and refuse if the context cannot support the answer."
-                    ),
+                        "and refuse if the context cannot support the answer.",
+                    ])),
                 )
             except MalformedModelOutputError:
                 return ModelQueryResponse(

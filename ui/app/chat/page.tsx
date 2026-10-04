@@ -56,9 +56,24 @@ type QueryResponse = {
 
 type ChatQueryResponse = {
   conversation: Conversation;
+  retryAfterSeconds?: number | null;
 };
 
 type MessageStatus = "complete" | "pending" | "error" | "stopped";
+
+const PROGRESS_LABELS = {
+  queued: "Starting the request",
+  planning: "Planning source searches",
+  searching: "Searching official documents",
+  reviewing: "Reviewing relevant passages",
+  expanding: "Following up on missing evidence",
+  comparing: "Comparing applicable rules",
+  drafting: "Drafting the cited answer",
+  refining: "Revising the draft",
+  checking: "Checking claims and citations",
+} as const;
+
+type ProgressStage = keyof typeof PROGRESS_LABELS;
 
 type ConversationMessage = {
   id: string;
@@ -68,6 +83,8 @@ type ConversationMessage = {
   status: MessageStatus;
   response?: QueryResponse;
   error?: string;
+  progressStages?: ProgressStage[];
+  retryAfterSeconds?: number;
 };
 
 type Conversation = {
@@ -79,7 +96,7 @@ type Conversation = {
 };
 
 const MAX_QUERY_LENGTH = 4000;
-const REQUEST_TIMEOUT_MS = 45_000;
+const REQUEST_TIMEOUT_MS = 90_000;
 const MAX_SAVED_CONVERSATIONS = 20;
 const CHAT_API_BASE = "/chat-api/conversations";
 
@@ -194,8 +211,12 @@ async function deleteServerConversation(conversationId: string): Promise<void> {
   }
 }
 
-function getResponseError(payload: unknown, status: number): string {
+function getResponseError(payload: unknown, status: number, retryAfter?: string | null): string {
   if (status === 429) {
+    const seconds = retryAfter && /^\d+$/.test(retryAfter) ? Number(retryAfter) : 0;
+    if (Number.isSafeInteger(seconds) && seconds > 0) {
+      return `This connection has reached the demo query limit. Try again in ${seconds.toLocaleString()} ${seconds === 1 ? "second" : "seconds"}.`;
+    }
     return "This connection has reached the demo query limit. Please wait before trying again.";
   }
   if (status >= 500) {
@@ -210,6 +231,73 @@ function getResponseError(payload: unknown, status: number): string {
   }
 
   return "The query could not be completed. Please review it and try again.";
+}
+
+function isProgressStage(value: unknown): value is ProgressStage {
+  return typeof value === "string" && value in PROGRESS_LABELS;
+}
+
+async function readChatResponse(
+  response: Response,
+  onProgress: (stage: ProgressStage) => void,
+): Promise<unknown> {
+  if (!response.headers.get("Content-Type")?.includes("text/event-stream") || !response.body) {
+    return parseJson(response);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let result: unknown;
+  let receivedResult = false;
+
+  function acceptFrame(frame: string) {
+    const lines = frame.split("\n");
+    const kind = lines.find((line) => line.startsWith("event: "))?.slice(7);
+    const rawData = lines.filter((line) => line.startsWith("data: ")).map((line) => line.slice(6)).join("\n");
+    if (!kind || !rawData) return;
+    let payload: unknown;
+    try {
+      payload = JSON.parse(rawData);
+    } catch {
+      throw new Error("The progress stream returned invalid data. Please try again.");
+    }
+    if (!payload || typeof payload !== "object") return;
+    if (kind === "progress" && "stage" in payload && isProgressStage(payload.stage)) {
+      onProgress(payload.stage);
+    } else if (kind === "result") {
+      result = payload;
+      receivedResult = true;
+    } else if (kind === "error") {
+      const error = payload as { status?: unknown; detail?: unknown };
+      const status = typeof error.status === "number" ? error.status : 500;
+      throw new Error(getResponseError(error, status));
+    }
+  }
+
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      buffer += done ? decoder.decode() : decoder.decode(value, { stream: true });
+      if (buffer.length > 2_000_000) {
+        throw new Error("The response is too large to display. Please try again.");
+      }
+      let boundary = buffer.indexOf("\n\n");
+      while (boundary !== -1) {
+        acceptFrame(buffer.slice(0, boundary));
+        buffer = buffer.slice(boundary + 2);
+        boundary = buffer.indexOf("\n\n");
+      }
+      if (done) break;
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
+  }
+  if (!receivedResult) {
+    throw new Error("The connection ended before an answer was returned. Please try again.");
+  }
+  return result;
 }
 
 function safeSourceUrl(sourceUrl: string): string | undefined {
@@ -249,7 +337,7 @@ function sourceCountLabel(count: number): string {
 
 function assistantMeta(message: ConversationMessage): string {
   if (message.status === "pending") {
-    return "Anchor · searching corpus";
+    return "Anchor · working";
   }
   if (message.status === "stopped") {
     return "Anchor · stopped";
@@ -451,15 +539,26 @@ function MessageActions({
   );
 }
 
-function RefusalContent({ response }: { response: QueryResponse }) {
+function RefusalContent({
+  response,
+  onRetry,
+  retryAfterSeconds,
+}: {
+  response: QueryResponse;
+  onRetry: () => void;
+  retryAfterSeconds?: number;
+}) {
   const reason = response.refusal_reason;
   const title = reason === "rate_limited" ? "Query limit reached"
     : reason === "ambiguous_question" ? "Please clarify your question"
     : reason === "not_in_corpus" ? "Outside the indexed corpus"
     : "More evidence needed";
-  const description = reason
+  let description = reason
     ? REFUSAL_COPY[reason]
     : "The corpus did not support a reliable answer to this question.";
+  if (reason === "rate_limited" && retryAfterSeconds && retryAfterSeconds > 0) {
+    description += ` The server asked you to wait ${retryAfterSeconds.toLocaleString()} ${retryAfterSeconds === 1 ? "second" : "seconds"} before trying again.`;
+  }
 
   return (
     <div className="note">
@@ -467,6 +566,10 @@ function RefusalContent({ response }: { response: QueryResponse }) {
         {title}
       </span>
       <p className="note-body">{description}</p>
+      <button type="button" className="note-retry" onClick={onRetry}>
+        <Retry size={14} />
+        Try again
+      </button>
     </div>
   );
 }
@@ -499,11 +602,23 @@ function FailureContent({
   );
 }
 
-function PendingContent() {
+function PendingContent({ stages }: { stages?: ProgressStage[] }) {
+  const current = stages?.at(-1);
   return (
-    <p className="thinking" role="status">
-      Searching and checking official sources…
-    </p>
+    <div className="progress-panel">
+      <p className="thinking" role="status">
+        {current ? PROGRESS_LABELS[current] : "Starting the request…"}
+      </p>
+      {stages && stages.length > 1 ? (
+        <ol className="progress-events" aria-label="Completed answer stages" aria-live="off">
+          {stages.slice(0, -1).map((stage, index) => (
+            <li key={`${stage}-${index}`}>
+              {PROGRESS_LABELS[stage]}
+            </li>
+          ))}
+        </ol>
+      ) : null}
+    </div>
   );
 }
 
@@ -542,13 +657,14 @@ function Transcript({
 
         let body: React.ReactNode;
         if (message.status === "pending") {
-          body = <PendingContent />;
+          body = <PendingContent stages={message.progressStages} />;
         } else if (message.status === "error" || message.status === "stopped") {
           body = <FailureContent message={message} onRetry={onRetry} />;
         } else if (message.response?.status === "answered") {
           body = <AnswerContent response={message.response} messageId={message.id} />;
         } else if (message.response) {
-          body = <RefusalContent response={message.response} />;
+          body = <RefusalContent response={message.response} retryAfterSeconds={message.retryAfterSeconds}
+                                 onRetry={() => onRetry(message.id)} />;
         } else {
           body = null;
         }
@@ -561,7 +677,7 @@ function Transcript({
           >
             <p className="assistant-meta">{assistantMeta(message)}</p>
             {body}
-            {message.status !== "pending" ? (
+            {message.status === "complete" && message.response?.status === "answered" ? (
               <MessageActions
                 message={message}
                 onRetry={onRetry}
@@ -597,6 +713,10 @@ export default function ChatConsole() {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const workRef = useRef<HTMLDivElement | null>(null);
   const pendingScrollRef = useRef<string | null>(null);
+  const menuToggleRef = useRef<HTMLButtonElement | null>(null);
+  const menuCloseRef = useRef<HTMLButtonElement | null>(null);
+  const menuPanelRef = useRef<HTMLElement | null>(null);
+  const menuWasOpenRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -679,6 +799,41 @@ export default function ChatConsole() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [sidebarOpen]);
+
+  useEffect(() => {
+    if (sidebarOpen) {
+      menuCloseRef.current?.focus();
+    } else if (menuWasOpenRef.current) {
+      menuToggleRef.current?.focus();
+    }
+    menuWasOpenRef.current = sidebarOpen;
+  }, [sidebarOpen]);
+
+  useEffect(() => {
+    const desktop = window.matchMedia("(min-width: 48.001rem)");
+    const closeOnDesktop = () => {
+      if (desktop.matches) setSidebarOpen(false);
+    };
+    desktop.addEventListener("change", closeOnDesktop);
+    return () => desktop.removeEventListener("change", closeOnDesktop);
+  }, []);
+
+  function trapMenuTab(event: React.KeyboardEvent<HTMLElement>) {
+    if (!sidebarOpen || event.key !== "Tab") return;
+    const focusable = menuPanelRef.current?.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    );
+    if (!focusable?.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
 
   useEffect(() => {
     if (!isLoading) {
@@ -814,6 +969,12 @@ export default function ChatConsole() {
     abortControllerRef.current = controller;
     stopRequestedRef.current = false;
     setIsLoading(true);
+    let stages: ProgressStage[] = [];
+    const onProgress = (stage: ProgressStage) => {
+      if (stages.at(-1) === stage) return;
+      stages = [...stages.slice(-7), stage];
+      updateAssistantMessage(conversationId, assistantMessageId, { progressStages: stages });
+    };
 
     let didTimeout = false;
     const timeoutId = window.setTimeout(() => {
@@ -823,10 +984,10 @@ export default function ChatConsole() {
 
     try {
       const response = await fetch(
-        `${CHAT_API_BASE}/${encodeURIComponent(conversationId)}/query`,
+        `${CHAT_API_BASE}/${encodeURIComponent(conversationId)}/query/stream`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
           body: JSON.stringify({
             question,
             user_message_id: userMessageId,
@@ -835,14 +996,18 @@ export default function ChatConsole() {
           signal: controller.signal,
         },
       );
-      const payload = await parseJson(response);
+      const payload = await readChatResponse(response, onProgress);
 
       if (isChatQueryResponse(payload)) {
-        replaceConversation(payload.conversation);
+        replaceConversation({
+          ...payload.conversation,
+          messages: payload.conversation.messages.map((message) => message.id === assistantMessageId
+            ? { ...message, retryAfterSeconds: payload.retryAfterSeconds ?? undefined } : message),
+        });
         return;
       }
 
-      throw new Error(getResponseError(payload, response.status));
+      throw new Error(getResponseError(payload, response.status, response.headers.get("Retry-After")));
     } catch (caught) {
       const wasStopped = stopRequestedRef.current;
       const message = wasStopped
@@ -874,6 +1039,12 @@ export default function ChatConsole() {
     abortControllerRef.current = controller;
     stopRequestedRef.current = false;
     setIsLoading(true);
+    let stages: ProgressStage[] = [];
+    const onProgress = (stage: ProgressStage) => {
+      if (stages.at(-1) === stage) return;
+      stages = [...stages.slice(-7), stage];
+      updateAssistantMessage(conversationId, assistantMessageId, { progressStages: stages });
+    };
 
     let didTimeout = false;
     const timeoutId = window.setTimeout(() => {
@@ -885,20 +1056,25 @@ export default function ChatConsole() {
       const response = await fetch(
         `${CHAT_API_BASE}/${encodeURIComponent(
           conversationId,
-        )}/messages/${encodeURIComponent(assistantMessageId)}/retry`,
+        )}/messages/${encodeURIComponent(assistantMessageId)}/retry/stream`,
         {
           method: "POST",
+          headers: { Accept: "text/event-stream" },
           signal: controller.signal,
         },
       );
-      const payload = await parseJson(response);
+      const payload = await readChatResponse(response, onProgress);
 
       if (isChatQueryResponse(payload)) {
-        replaceConversation(payload.conversation);
+        replaceConversation({
+          ...payload.conversation,
+          messages: payload.conversation.messages.map((message) => message.id === assistantMessageId
+            ? { ...message, retryAfterSeconds: payload.retryAfterSeconds ?? undefined } : message),
+        });
         return;
       }
 
-      throw new Error(getResponseError(payload, response.status));
+      throw new Error(getResponseError(payload, response.status, response.headers.get("Retry-After")));
     } catch (caught) {
       const wasStopped = stopRequestedRef.current;
       const message = wasStopped
@@ -1007,6 +1183,7 @@ export default function ChatConsole() {
       response: undefined,
       status: "pending",
       error: undefined,
+      progressStages: [],
       createdAt: new Date().toISOString(),
     });
     void requestRetry(activeConversation.id, messageId);
@@ -1180,7 +1357,15 @@ export default function ChatConsole() {
 
   return (
     <div className="workspace" data-open={sidebarOpen}>
-        <aside className="side" aria-label="Your questions">
+        <aside
+          id="chat-questions-menu"
+          ref={menuPanelRef}
+          className="side"
+          role={sidebarOpen ? "dialog" : undefined}
+          aria-modal={sidebarOpen ? "true" : undefined}
+          aria-label="Your questions"
+          onKeyDown={trapMenuTab}
+        >
           <div className="side-head">
             <Link
               href="/"
@@ -1191,6 +1376,7 @@ export default function ChatConsole() {
               Anchor
             </Link>
             <button
+              ref={menuCloseRef}
               type="button"
               className="side-close"
               onClick={() => setSidebarOpen(false)}
@@ -1268,13 +1454,16 @@ export default function ChatConsole() {
           onClick={() => setSidebarOpen(false)}
         />
 
-        <div className="work" ref={workRef}>
+        <div className="work" ref={workRef} inert={sidebarOpen}>
           <header className="work-top">
             <button
+              ref={menuToggleRef}
               type="button"
               className="icon-btn menu-toggle"
               onClick={() => setSidebarOpen(true)}
               aria-label="Open questions menu"
+              aria-controls="chat-questions-menu"
+              aria-expanded={sidebarOpen}
             >
               <Menu size={18} />
             </button>

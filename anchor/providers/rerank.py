@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from math import isfinite
 from typing import Protocol
 
@@ -29,23 +30,32 @@ class CohereRerankProvider:
         if not candidates:
             return []
         documents = [format_rerank_document(chunk) for chunk in candidates]
-        try:
-            async with httpx.AsyncClient(timeout=self.settings.request_timeout_seconds) as client:
-                response = await client.post(
-                    "https://api.cohere.com/v2/rerank",
-                    headers={
-                        "Authorization": f"Bearer {self.settings.cohere_api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json={
-                        "model": self.settings.rerank_model,
-                        "query": question,
-                        "documents": documents,
-                        "top_n": top_n,
-                    },
-                )
-        except httpx.HTTPError as exc:
-            raise ProviderError("Cohere request failed", provider="cohere") from exc
+        timeout = min(self.settings.request_timeout_seconds, self.settings.rerank_request_timeout_seconds)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            for attempt in range(2):
+                try:
+                    response = await client.post(
+                        "https://api.cohere.com/v2/rerank",
+                        headers={
+                            "Authorization": f"Bearer {self.settings.cohere_api_key}",
+                            "Content-Type": "application/json",
+                        },
+                        json={
+                            "model": self.settings.rerank_model,
+                            "query": question,
+                            "documents": documents,
+                            "top_n": top_n,
+                        },
+                    )
+                except httpx.HTTPError as exc:
+                    if attempt == 0:
+                        await asyncio.sleep(0.4)
+                        continue
+                    raise ProviderError("Cohere request failed", provider="cohere") from exc
+                if response.status_code in {408, 500, 502, 503, 504} and attempt == 0:
+                    await asyncio.sleep(0.4)
+                    continue
+                break
         if not response.is_success:
             raise ProviderError(
                 f"Cohere request failed with status {response.status_code}",

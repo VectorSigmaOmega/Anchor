@@ -79,7 +79,7 @@ const MEASURES = [
   ["Retrieval recall at 5", "≥ 0.88", "Fixture path only"],
   ["Refusal precision, out-of-corpus set", "≥ 0.90", "Fixture path only"],
   ["Answers with a valid citation", "100%", "Enforced on the server"],
-  ["Latency at p95", "≤ 3.5s", "Recorded for each request"],
+  ["Latency at p95", "≤ 3.5s", "Target not verified in CI"],
 ];
 
 const FAQS: { question: string; answer: React.ReactNode }[] = [
@@ -334,7 +334,7 @@ export default function LandingPage() {
                   <strong>100%</strong> of answers have a citation
                 </span>
                 <span>
-                  <strong>3.5 s</strong> latency target at p95
+                  <strong>{CORPUS_SNAPSHOT}</strong> corpus snapshot
                 </span>
               </div>
               <p className="hero-note">
@@ -518,7 +518,7 @@ export default function LandingPage() {
               Measurement
             </h2>
             <p className="section-intro">
-              The product requirements give these targets. A smoke evaluation
+              These are product targets, not measured results. A smoke evaluation
               runs in the CI pipeline for each pull request.
             </p>
             <div
