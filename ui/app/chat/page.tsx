@@ -713,6 +713,7 @@ export default function ChatConsole() {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const workRef = useRef<HTMLDivElement | null>(null);
   const pendingScrollRef = useRef<string | null>(null);
+  const pendingRevealRef = useRef<string | null>(null);
   const menuToggleRef = useRef<HTMLButtonElement | null>(null);
   const menuCloseRef = useRef<HTMLButtonElement | null>(null);
   const menuPanelRef = useRef<HTMLElement | null>(null);
@@ -927,7 +928,34 @@ export default function ChatConsole() {
     const visibleTarget = answer && answerOffset + 112 > scrollArea.clientHeight
       ? answer
       : target;
-    visibleTarget.scrollIntoView({ block: "start", behavior: "smooth" });
+    // Streamed updates can interrupt a smooth scroll before it reaches a long
+    // question's answer. Position the chat scroller immediately instead.
+    scrollArea.scrollTop += visibleTarget.getBoundingClientRect().top
+      - scrollArea.getBoundingClientRect().top - 12;
+  }, [messages]);
+
+  useEffect(() => {
+    const answerId = pendingRevealRef.current;
+    const scrollArea = scrollRef.current;
+    const message = messages.find((item) => item.id === answerId);
+    if (!answerId || !scrollArea || !message) {
+      return;
+    }
+    if (message.status === "pending") {
+      // Follow new stages while the reader remains near the latest one.
+      if (scrollArea.scrollHeight - scrollArea.scrollTop - scrollArea.clientHeight <= 80) {
+        scrollArea.scrollTop = scrollArea.scrollHeight;
+      }
+      return;
+    }
+    pendingRevealRef.current = null;
+    const answer = scrollArea.querySelector<HTMLElement>(`[data-mid="${answerId}"]`);
+    const question = answer?.previousElementSibling;
+    if (answer && question && answer.getBoundingClientRect().top
+      - question.getBoundingClientRect().top + 112 > scrollArea.clientHeight) {
+      scrollArea.scrollTop += answer.getBoundingClientRect().top
+        - scrollArea.getBoundingClientRect().top - 12;
+    }
   }, [messages]);
 
   // Land the cursor in the composer when a keyboard is the likely input.
@@ -1175,6 +1203,7 @@ export default function ChatConsole() {
 
     replaceConversation(updatedConversation);
     pendingScrollRef.current = userMessage.id;
+    pendingRevealRef.current = assistantMessage.id;
     setDraft("");
     setComposerError("");
     void requestAnswer(
@@ -1191,6 +1220,7 @@ export default function ChatConsole() {
     }
 
     pendingScrollRef.current = messageId;
+    pendingRevealRef.current = messageId;
     updateAssistantMessage(activeConversation.id, messageId, {
       content: "",
       response: undefined,
